@@ -24,14 +24,12 @@
     <main class="stage" id="stageArea">
       <video id="liveVideo" playsinline muted autoplay></video>
       
-      <!-- Elemente interactiv-mutabile pe ecran cu fallback text dacă imaginea lipsește -->
+      <!-- Logo și Poză Site din folderul assets, mutabile pe ecran -->
       <div id="draggableLogo" class="draggable-item" title="Trage de logo să-l muți">
-        <img src="assets/logo.png" alt="Logo R&I" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-        <span style="display:none; color:var(--gold); font-size:12px; font-weight:bold;">R&I LOGO</span>
+        <img src="assets/logo.png" alt="Logo R&I" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'90\' height=\'40\'><text x=\'0\' y=\'30\' fill=\'%23e2c14a\' font-size=\'20\' font-weight=\'bold\'>R&I</text></svg>';" />
       </div>
-      <div id="draggableTel" class="draggable-item" title="Trage de telefon să-l muți">
-        <img src="assets/telefon.png" alt="Telefon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-        <span style="display:none; color:var(--gold); font-size:11px; font-weight:bold;">📞 0700 000 000</span>
+      <div id="draggableSite" class="draggable-item" title="Trage de poza site să o muți">
+        <img src="assets/site.png" alt="Site" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'130\' height=\'30\'><text x=\'0\' y=\'20\' fill=\'%23e2c14a\' font-size=\'14\' font-weight=\'bold\'>🌐 R&I ȘANTIER</text></svg>';" />
       </div>
 
       <!-- Buton mare Flip Cameră direct pe ecran -->
