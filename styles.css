@@ -26,13 +26,23 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 
 .stage { position: relative; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+
+/* Video-ul real e sursa pentru canvas, dar nu se vede: display:none poate opri frame-urile pe unele telefoane, așa că îl facem doar invizibil */
 #liveVideo {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 0; background: #000;
+  opacity: 0; pointer-events: none;
+}
+
+/* Canvas-ul e ce vede utilizatorul ȘI ce se înregistrează (video + logo + poză site compuse) */
+#stageCanvas {
   position: absolute; inset: 0; width: 100%; height: 100%;
   object-fit: cover; z-index: 1; background: #000;
 }
 
 .draggable-item {
   position: absolute; cursor: grab; z-index: 10; user-select: none;
+  touch-action: none;
 }
 .draggable-item:active { cursor: grabbing; }
 
@@ -41,6 +51,18 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 #draggableSite { top: 20px; right: 20px; width: 120px; }
 #draggableSite img { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.9)); pointer-events: none; }
+
+/* Mâner de redimensionare (free transform) în colțul din dreapta-jos al fiecărei poze */
+.resize-handle {
+  position: absolute; right: -12px; bottom: -12px; width: 24px; height: 24px;
+  border-radius: 50%; background: var(--gold); border: 2px solid #000;
+  cursor: nwse-resize; touch-action: none; z-index: 11;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.7);
+}
+.resize-handle::after {
+  content: "⤡"; font-size: 12px; color: #111; font-weight: 700;
+}
 
 .big-flip-btn {
   position: absolute; top: 16px; right: 150px; z-index: 15;
@@ -73,6 +95,16 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 }
 #vuFill { width: 100%; height: 5%; background: linear-gradient(#3d9, var(--gold), var(--rec)); }
 
+/* Butonul REC plutitor: e copil al .stage, deci rămâne vizibil chiar dacă #controlPanel e ascuns */
+.rec-btn-float {
+  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%);
+  z-index: 25;
+  width: 62px; height: 62px; border-radius: 50%;
+  border: 3px solid #fff; background: var(--rec);
+  box-shadow: 0 0 0 3px #000, 0 0 0 5px #444; cursor: pointer;
+}
+.rec-btn-float.on { background: #fff; border-color: var(--rec); }
+
 .controls {
   background: var(--panel); padding: 10px 12px 14px;
   border-top: 1px solid #222; transition: transform 0.2s ease; z-index: 20;
@@ -90,13 +122,6 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
   border-radius: 999px; padding: 8px 12px; font-size: 12px; cursor: pointer; flex: 1; text-align: center;
 }
 .chk { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; }
-
-.rec-btn {
-  width: 54px; height: 54px; border-radius: 50%;
-  border: 3px solid #fff; background: var(--rec);
-  box-shadow: 0 0 0 3px #000, 0 0 0 5px #444; cursor: pointer; flex: unset;
-}
-.rec-btn.on { background: #fff; border-color: var(--rec); }
 
 .drawer {
   position: fixed; inset: 0; background: #0c0c0c; z-index: 30;
