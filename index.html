@@ -24,12 +24,14 @@
     <main class="stage" id="stageArea">
       <video id="liveVideo" playsinline muted autoplay></video>
       
-      <!-- Elemente vizibile și mutabile pe ecran (Drag & Drop) -->
-      <div id="draggableLogo" class="watermark-logo" title="Trage de logo să-l muți">
-        <img src="assets/logo.png" alt="Logo" />
+      <!-- Elemente interactiv-mutabile pe ecran cu fallback text dacă imaginea lipsește -->
+      <div id="draggableLogo" class="draggable-item" title="Trage de logo să-l muți">
+        <img src="assets/logo.png" alt="Logo R&I" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+        <span style="display:none; color:var(--gold); font-size:12px; font-weight:bold;">R&I LOGO</span>
       </div>
-      <div id="draggableTel" class="watermark-tel" title="Trage de telefon să-l muți">
-        <img src="assets/telefon.png" alt="Telefon" />
+      <div id="draggableTel" class="draggable-item" title="Trage de telefon să-l muți">
+        <img src="assets/telefon.png" alt="Telefon" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+        <span style="display:none; color:var(--gold); font-size:11px; font-weight:bold;">📞 0700 000 000</span>
       </div>
 
       <!-- Buton mare Flip Cameră direct pe ecran -->
