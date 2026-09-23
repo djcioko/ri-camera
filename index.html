@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#0b0b0b" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <title>R&I Camera — Grupul de Firme</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="assets/logo.png" />
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <img src="assets/logo.png" alt="R&I" class="top-logo" />
+      <div class="top-meta">
+        <strong>R&amp;I CAMERA</strong>
+        <input id="siteName" type="text" placeholder="Nume șantier (ex. Pipera)" />
+      </div>
+      <button id="btnGloves" class="icon-btn" type="button">🧤</button>
+      <button id="btnLibrary" class="icon-btn" title="Bibliotecă">📁 <span id="clipCount">0</span></button>
+    </header>
+
+    <main class="stage">
+      <video id="liveVideo" playsinline muted autoplay></video>
+      <canvas id="previewCanvas"></canvas>
+      <div id="grid" class="grid hidden"></div>
+      <div class="overlay-ui">
+        <div class="vu-wrap">
+          <div class="vu-label">VOL</div>
+          <div class="vu-bar"><div id="vuFill"></div></div>
+        </div>
+        <div id="recBadge" class="rec-badge hidden">● REC <span id="recTime">00:00</span></div>
+        <div id="lockBadge" class="lock-badge hidden">AE/AF LOCK</div>
+      </div>
+    </main>
+
+    <section class="controls">
+      <div class="row-btns">
+        <button id="btnFlip" class="pill">🔄 Față / Spate</button>
+        <button id="btnGrid" class="pill">▦ Grid</button>
+        <button id="btnLock" class="pill">🔒 Focus</button>
+      </div>
+      <div class="sliders">
+        <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
+        <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
+        <label>Saturație <input id="sSaturate" type="range" min="0" max="200" value="110" /></label>
+        <label>Zoom <input id="sZoom" type="range" min="100" max="300" value="100" /></label>
+      </div>
+      <div class="overlay-edit">
+        <div class="tabs">
+          <button id="tabLogo" class="pill on" type="button">Logo</button>
+          <button id="tabTel" class="pill" type="button">Telefon</button>
+        </div>
+        <div class="sliders">
+          <label>Mărime overlay <input id="sOvSize" type="range" min="20" max="160" value="70" /></label>
+          <label>Rotire ° <input id="sOvRot" type="range" min="-30" max="30" value="0" /></label>
+          <label>Stânga / dreapta <input id="sOvX" type="range" min="-40" max="40" value="0" /></label>
+          <label>Sus / jos <input id="sOvY" type="range" min="-20" max="40" value="0" /></label>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="btnReset" class="pill">Reset</button>
+        <button id="btnRec" class="rec-btn" aria-label="Înregistrează"></button>
+        <label class="pill chk"><input id="chkDate" type="checkbox" checked /> Dată pe film</label>
+      </div>
+    </section>
+  </div>
+
+  <aside id="library" class="drawer hidden">
+    <div class="drawer-head">
+      <h2>Clipuri salvate</h2>
+      <button id="btnCloseLib" class="icon-btn">✕</button>
+    </div>
+    <div id="clipList" class="clip-list"></div>
+    <div class="drawer-foot">
+      <label class="hint">Muzică montaj (opțional)
+        <input id="musicFile" type="file" accept="audio/*" />
+      </label>
+      <button id="btnFavExport" class="pill wide">★ Descarcă doar cele mai bune</button>
+      <button id="btnMontage" class="pill wide">🤖 Bot editor — montaj (2–4s, fade)</button>
+      <p class="hint">Pe Wi-Fi acasă: descarci favoritele pe telefon/laptop, apoi le pui în Drive. Grid-ul NU intră în film.</p>
+    </div>
+  </aside>
+  <script src="app.js"></script>
+</body>
+</html>
