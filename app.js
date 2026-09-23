@@ -241,7 +241,7 @@ const siteInput = document.getElementById("siteName");
 siteInput.value = localStorage.getItem("ri_site_name") || "";
 siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
 
-// Mutare elemente pe ecran (Drag & Drop pentru Logo și Site)
+// Mutare elemente pe ecran (Drag & Drop)
 function makeDraggable(elm) {
   let startX = 0, startY = 0, posX = 0, posY = 0;
 
