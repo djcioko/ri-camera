@@ -24,25 +24,15 @@
     </header>
 
     <main class="stage">
-      <!-- Video vizibil direct pe ecran -->
       <video id="liveVideo" playsinline muted autoplay></video>
       
-      <!-- Overlay-uri grafice peste video -->
-      <div class="watermark-logo">
-        <img src="assets/logo.png" alt="Logo" />
-      </div>
-      <div class="watermark-tel">
-        <img src="assets/telefon.png" alt="Telefon" />
-      </div>
+      <div class="watermark-logo"><img src="assets/logo.png" alt="Logo" /></div>
+      <div class="watermark-tel"><img src="assets/telefon.png" alt="Telefon" /></div>
 
-      <div class="hud-top-left">
-        <span id="techInfoBadge" class="tech-badge">1080p / 60 FPS</span>
-      </div>
+      <div class="hud-top-left"><span id="techInfoBadge" class="tech-badge">1080p / 60 FPS</span></div>
       <div id="recBadge" class="rec-badge hidden">● REC <span id="recTime">00:00</span></div>
       
-      <div class="vu-wrap">
-        <div class="vu-bar"><div id="vuFill"></div></div>
-      </div>
+      <div class="vu-wrap"><div class="vu-bar"><div id="vuFill"></div></div></div>
       <div id="lockBadge" class="lock-badge hidden">FOCUS FIX</div>
     </main>
 
