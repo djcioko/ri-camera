@@ -25,35 +25,27 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
   border-radius: 8px; padding: 6px 10px; font-size: 14px; cursor: pointer;
 }
 
-/* Scena camerei: asigurăm suprapunerea corectă */
-.stage { position: relative; flex: 1; background: #000; overflow: hidden; }
+.stage { position: relative; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 #liveVideo {
-  position: absolute; inset: 0;
-  width: 100%; height: 100%;
-  object-fit: cover;
-  z-index: 1;
-  background: #000;
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; z-index: 1; background: #000;
 }
 
-/* Elemente mutabile pe ecran, deasupra camerei (z-index mare) */
 .draggable-item {
-  position: absolute;
-  cursor: grab;
-  z-index: 10;
-  user-select: none;
+  position: absolute; cursor: grab; z-index: 10; user-select: none;
 }
 .draggable-item:active { cursor: grabbing; }
 
 #draggableLogo { top: 20px; left: 20px; width: 90px; }
 #draggableLogo img { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.9)); pointer-events: none; }
 
-#draggableSite { top: 20px; right: 85px; width: 120px; }
+#draggableSite { top: 20px; right: 20px; width: 120px; }
 #draggableSite img { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.9)); pointer-events: none; }
 
 .big-flip-btn {
-  position: absolute; top: 16px; right: 16px; z-index: 15;
+  position: absolute; top: 16px; right: 150px; z-index: 15;
   background: rgba(28, 28, 28, 0.9); color: #fff; border: 2px solid var(--gold);
-  border-radius: 50%; width: 52px; height: 52px; font-size: 22px;
+  border-radius: 50%; width: 44px; height: 44px; font-size: 18px;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
   box-shadow: 0 4px 12px rgba(0,0,0,0.6);
 }
