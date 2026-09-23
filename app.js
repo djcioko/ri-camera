@@ -1,179 +1,422 @@
-let mediaStream = null;
+const liveVideo = document.getElementById("liveVideo");
+const canvas = document.getElementById("previewCanvas");
+const ctx = canvas.getContext("2d");
+const vuFill = document.getElementById("vuFill");
+const recBadge = document.getElementById("recBadge");
+const recTime = document.getElementById("recTime");
+const clipCount = document.getElementById("clipCount");
+const clipList = document.getElementById("clipList");
+
+const sBright = document.getElementById("sBright");
+const sContrast = document.getElementById("sContrast");
+const sSaturate = document.getElementById("sSaturate");
+const sZoom = document.getElementById("sZoom");
+
+const logoImg = new Image();
+const telImg = new Image();
+logoImg.src = "assets/logo.png";
+telImg.src = "assets/telefon.png";
+
+let stream = null;
+let facingMode = "environment";
+let audioCtx, analyser, dataArray;
+let recording = false;
 let mediaRecorder = null;
-let recordedChunks = [];
-let currentFacingMode = 'environment'; // 'user' pentru față, 'environment' pentru spate
-let recordings = []; // Coada de înregistrări cronologice
+let recChunks = [];
+let recStarted = 0;
+let recTimer = null;
+let captureStream = null;
 
-const videoPreview = document.getElementById('video-preview');
-const btnRecord = document.getElementById('btn-record');
-const btnSwitchCam = document.getElementById('btn-switch-cam');
-const btnFullscreen = document.getElementById('btn-fullscreen');
-const infoBadge = document.getElementById('info-badge');
-const vumeterBar = document.getElementById('vumeter-bar');
+const overlays = {
+  logo: { size: 70, rot: 0, x: 0, y: 0 },
+  tel: { size: 70, rot: 0, x: 0, y: 8 },
+};
+let activeOv = "logo";
 
-const playbackModal = document.getElementById('playback-modal');
-const videoPlayer = document.getElementById('video-player');
-const btnCloseModal = document.getElementById('btn-close-modal');
-const queueList = document.getElementById('queue-list');
+const DB_NAME = "ri-camera";
+const STORE = "clips";
 
-// Inițializare Cameră
-async function initCamera(facingMode = 'environment') {
-    if (mediaStream) {
-        mediaStream.getTracks().forEach(track => track.stop());
-    }
-
-    try {
-        const constraints = {
-            video: {
-                facingMode: facingMode,
-                width: { ideal: 1920 },
-                height: { ideal: 1080 },
-                frameRate: { ideal: 60 }
-            },
-            audio: true
-        };
-
-        mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-        videoPreview.srcObject = mediaStream;
-
-        // Detecție cadru și FPS efectiv pentru afișare în info badge
-        const videoTrack = mediaStream.getVideoTracks()[0];
-        const settings = videoTrack.getSettings();
-        infoBadge.innerText = `${settings.height || 1080}p • ${settings.frameRate || 60} FPS`;
-
-        setupAudioMeter(mediaStream);
-    } catch (error) {
-        console.error("Erore la pornirea camerei:", error);
-        alert("Nu s-a putut accesa camera sau microfonul.");
-    }
+function openDb() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(STORE, { keyPath: "id" });
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
 }
 
-// Simulare Vumetru Audio pe baza fluxului de microfon
-function setupAudioMeter(stream) {
-    try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const analyser = audioCtx.createAnalyser();
-        const microphone = audioCtx.createMediaStreamSource(stream);
-        const javascriptNode = audioCtx.createScriptProcessor(2048, 1, 1);
-
-        analyser.smoothingTimeConstant = 0.8;
-        analyser.fftSize = 512;
-
-        microphone.connect(analyser);
-        analyser.connect(javascriptNode);
-        javascriptNode.connect(audioCtx.destination);
-
-        javascriptNode.onaudioprocess = () => {
-            const array = new Uint8Array(analyser.frequencyBinCount);
-            analyser.getByteFrequencyData(array);
-            let values = 0;
-            for (let i = 0; i < array.length; i++) {
-                values += array[i];
-            }
-            let average = values / array.length;
-            let percentage = Math.min(100, (average / 128) * 100);
-            vumeterBar.style.width = percentage + '%';
-        };
-    } catch (e) {
-        console.log("Audio context eroare / nepermis:", e);
-    }
+async function saveClip(blob) {
+  const db = await openDb();
+  const clip = {
+    id: Date.now(),
+    createdAt: new Date().toISOString(),
+    size: blob.size,
+    type: blob.type || "video/webm",
+    favorite: false,
+    site: (document.getElementById("siteName").value || "santier").trim(),
+    blob,
+  };
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(clip);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  await refreshLibrary();
 }
 
-// Comutare Cameră Față / Spate chiar și în timpul înregistrării
-btnSwitchCam.addEventListener('click', () => {
-    currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
-    initCamera(currentFacingMode);
-});
+async function getClips() {
+  const db = await openDb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result.sort((a, b) => b.id - a.id));
+    req.onerror = () => reject(req.error);
+  });
+}
 
-// Fullscreen Toggle
-btnFullscreen.addEventListener('click', () => {
-    if (!document.fullscreenElement) {
-        document.documentElement.requestFullscreen().catch(err => {
-            alert(`Erore la activarea ecranului complet: ${err.message}`);
-        });
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        }
-    }
-});
+async function toggleFavorite(id) {
+  const clips = await getClips();
+  const c = clips.find((x) => x.id === id);
+  if (!c) return;
+  c.favorite = !c.favorite;
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(c);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  await refreshLibrary();
+}
 
-// Gestionare Înregistrare Video (Record)
-btnRecord.addEventListener('click', () => {
-    if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        startRecording();
-    } else {
-        stopRecording();
+async function deleteClip(id) {
+  const db = await openDb();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = resolve;
+    tx.onerror = () => reject(tx.error);
+  });
+  await refreshLibrary();
+}
+
+async function refreshLibrary() {
+  const clips = await getClips();
+  clipCount.textContent = clips.length;
+  clipList.innerHTML = "";
+  if (!clips.length) {
+    clipList.innerHTML = "<p class='hint'>Niciun clip încă. Filmează pe șantier și rămân aici.</p>";
+    return;
+  }
+  for (const c of clips) {
+    const url = URL.createObjectURL(c.blob);
+    const el = document.createElement("div");
+    el.className = "clip";
+    const dt = new Date(c.createdAt);
+    el.innerHTML = `
+      <video src="${url}" controls playsinline></video>
+      <div class="meta">
+        ${c.favorite ? "★ " : ""}${dt.toLocaleString("ro-RO")}
+        <small>${(c.size / 1024 / 1024).toFixed(1)} MB ${c.favorite ? "· CEL MAI BUN" : ""}</small>
+      </div>
+      <button class="pill" data-act="fav">${c.favorite ? "★" : "☆"}</button>
+      <button class="pill" data-act="dl">Salvează</button>
+      <button class="pill" data-act="del">Șterge</button>
+    `;
+    el.querySelector('[data-act="fav"]').onclick = () => toggleFavorite(c.id);
+    el.querySelector('[data-act="dl"]').onclick = () => {
+      const a = document.createElement("a");
+      a.href = url;
+      const site = (c.site || "santier").replace(/\s+/g, "_");
+      a.download = `RI_${site}_${dt.toISOString().slice(0,10)}_${c.id}.webm`;
+      a.click();
+    };
+    el.querySelector('[data-act="del"]').onclick = () => deleteClip(c.id);
+    clipList.appendChild(el);
+  }
+}
+
+async function startCamera() {
+  if (stream) stream.getTracks().forEach((t) => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({
+    audio: true,
+    video: {
+      facingMode,
+      width: { ideal: 1920 },
+      height: { ideal: 1080 },
+    },
+  });
+  liveVideo.srcObject = stream;
+  await liveVideo.play();
+
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  } else if (audioCtx.state === "suspended") {
+    audioCtx.resume();
+  }
+  const src = audioCtx.createMediaStreamSource(stream);
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 256;
+  src.connect(analyser);
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+  resizeCanvas();
+}
+
+function resizeCanvas() {
+  const maxW = canvas.clientWidth || window.innerWidth;
+  const maxH = canvas.clientHeight || window.innerHeight * 0.55;
+  const vw = liveVideo.videoWidth || 1280;
+  const vh = liveVideo.videoHeight || 720;
+  const scale = Math.min(maxW / vw, maxH / vh) || 1;
+  canvas.width = Math.round(vw * scale) || maxW;
+  canvas.height = Math.round(vh * scale) || maxH;
+}
+
+function drawTransparentPng(img, x, y, w, h) {
+  if (!img.complete || !img.naturalWidth) return;
+  const off = document.createElement("canvas");
+  off.width = img.naturalWidth;
+  off.height = img.naturalHeight;
+  const octx = off.getContext("2d");
+  octx.drawImage(img, 0, 0);
+  const data = octx.getImageData(0, 0, off.width, off.height);
+  const px = data.data;
+  for (let i = 0; i < px.length; i += 4) {
+    if (px[i] < 28 && px[i + 1] < 28 && px[i + 2] < 28) px[i + 3] = 0;
+  }
+  octx.putImageData(data, 0, 0);
+  ctx.drawImage(off, x, y, w, h);
+}
+
+function drawFrame() {
+  const w = canvas.width;
+  const h = canvas.height;
+  if (!w || !h) {
+    requestAnimationFrame(drawFrame);
+    return;
+  }
+
+  const bright = sBright.value;
+  const contrast = sContrast.value;
+  const saturate = sSaturate.value;
+  const zoom = sZoom.value / 100;
+
+  ctx.save();
+  ctx.filter = `brightness(${bright}%) contrast(${contrast}%) saturate(${saturate}%)`;
+
+  const vw = liveVideo.videoWidth || w;
+  const vh = liveVideo.videoHeight || h;
+  const zw = vw / zoom;
+  const zh = vh / zoom;
+  const sx = (vw - zw) / 2;
+  const sy = (vh - zh) / 2;
+  if (liveVideo.readyState >= 2) {
+    ctx.drawImage(liveVideo, sx, sy, zw, zh, 0, 0, w, h);
+  } else {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, w, h);
+  }
+  ctx.restore();
+
+  function drawOv(img, ov, baseW) {
+    if (!img.complete || !img.naturalWidth) return;
+    const scale = ov.size / 70;
+    const dw = baseW * scale;
+    const dh = dw * (img.naturalHeight / img.naturalWidth);
+    const cx = w / 2 + (ov.x / 100) * w;
+    const cy = 16 + dh / 2 + (ov.y / 100) * h;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate((ov.rot * Math.PI) / 180);
+    drawTransparentPng(img, -dw / 2, -dh / 2, dw, dh);
+    ctx.restore();
+  }
+  drawOv(logoImg, overlays.logo, Math.min(w * 0.32, 240));
+  drawOv(telImg, overlays.tel, Math.min(w * 0.62, 460));
+
+  if (document.getElementById("chkDate")?.checked) {
+    const site = (document.getElementById("siteName").value || "R&I").trim();
+    const d = new Date().toLocaleDateString("ro-RO");
+    ctx.save();
+    ctx.font = `600 ${Math.max(12, Math.round(w * 0.022))}px sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,.88)";
+    ctx.textAlign = "right";
+    ctx.fillText(`${site} · ${d}`, w - 12, h - 14);
+    ctx.restore();
+  }
+
+  if (analyser && dataArray) {
+    analyser.getByteTimeDomainData(dataArray);
+    let peak = 0;
+    for (let i = 0; i < dataArray.length; i++) {
+      peak = Math.max(peak, Math.abs(dataArray[i] - 128));
     }
-});
+    const pct = Math.min(100, (peak / 128) * 160);
+    vuFill.style.height = `${Math.max(6, pct)}%`;
+  }
+
+  requestAnimationFrame(drawFrame);
+}
+
+function mimeType() {
+  const types = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4",
+  ];
+  return types.find((t) => MediaRecorder.isTypeSupported(t)) || "";
+}
 
 function startRecording() {
-    recordedChunks = [];
-    try {
-        mediaRecorder = new MediaRecorder(mediaStream, { mimeType: 'video/webm; codecs=vp9' });
-    } catch (e) {
-        mediaRecorder = new MediaRecorder(mediaStream); // Fallback
-    }
+  captureStream = canvas.captureStream(30);
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length) captureStream.addTrack(audioTracks[0]);
 
-    mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-            recordedChunks.push(event.data);
-        }
-    };
-
-    mediaRecorder.onstop = () => {
-        const blob = new Blob(recordedChunks, { type: 'video/webm' });
-        const videoUrl = URL.createObjectURL(blob);
-        const timestamp = new Date().toLocaleTimeString();
-
-        const recordingObj = {
-            id: Date.now(),
-            url: videoUrl,
-            time: timestamp,
-            blob: blob
-        };
-
-        recordings.push(recordingObj);
-        renderQueue();
-    };
-
-    mediaRecorder.start();
-    btnRecord.classList.add('recording');
-    btnRecord.innerText = "■ STOP";
+  recChunks = [];
+  mediaRecorder = new MediaRecorder(captureStream, { mimeType: mimeType(), videoBitsPerSecond: 6_000_000 });
+  mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size) recChunks.push(e.data);
+  };
+  mediaRecorder.onstop = async () => {
+    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || "video/webm" });
+    await saveClip(blob);
+  };
+  mediaRecorder.start(250);
+  recording = true;
+  recStarted = Date.now();
+  recBadge.classList.remove("hidden");
+  document.getElementById("btnRec").classList.add("on");
+  recTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - recStarted) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    recTime.textContent = `${mm}:${ss}`;
+  }, 250);
 }
 
 function stopRecording() {
-    mediaRecorder.stop();
-    btnRecord.classList.remove('recording');
-    btnRecord.innerText = "● REC";
+  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
+  recording = false;
+  recBadge.classList.add("hidden");
+  document.getElementById("btnRec").classList.remove("on");
+  clearInterval(recTimer);
 }
 
-// Randare Coadă / Rând cronologic
-function renderQueue() {
-    queueList.innerHTML = '';
-    recordings.forEach((rec, index) => {
-        const item = document.createElement('div');
-        item.className = 'queue-item';
-        item.innerText = `Video #${index + 1}\n${rec.time}`;
-        item.onclick = () => openPlayer(rec);
-        queueList.appendChild(item);
+document.getElementById("btnRec").onclick = () => {
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+  recording ? stopRecording() : startRecording();
+};
+
+document.getElementById("btnFlip").onclick = async () => {
+  facingMode = facingMode === "environment" ? "user" : "environment";
+  await startCamera();
+};
+
+// Fullscreen
+document.getElementById("btnFullscreen").onclick = () => {
+  if (!document.fullscreenElement) {
+    document.documentElement.requestFullscreen().catch(() => {});
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+  }
+};
+
+document.getElementById("btnReset").onclick = () => {
+  sBright.value = 100;
+  sContrast.value = 100;
+  sSaturate.value = 110;
+  sZoom.value = 100;
+  overlays.logo = { size: 70, rot: 0, x: 0, y: 0 };
+  overlays.tel = { size: 70, rot: 0, x: 0, y: 8 };
+  syncOvSliders();
+};
+
+function syncOvSliders() {
+  const o = overlays[activeOv];
+  document.getElementById("sOvSize").value = o.size;
+  document.getElementById("sOvRot").value = o.rot;
+  document.getElementById("sOvX").value = o.x;
+  document.getElementById("sOvY").value = o.y;
+  document.getElementById("tabLogo").classList.toggle("on", activeOv === "logo");
+  document.getElementById("tabTel").classList.toggle("on", activeOv === "tel");
+}
+document.getElementById("tabLogo").onclick = () => { activeOv = "logo"; syncOvSliders(); };
+document.getElementById("tabTel").onclick = () => { activeOv = "tel"; syncOvSliders(); };
+["sOvSize", "sOvRot", "sOvX", "sOvY"].forEach((id) => {
+  document.getElementById(id).oninput = () => {
+    overlays[activeOv].size = +document.getElementById("sOvSize").value;
+    overlays[activeOv].rot = +document.getElementById("sOvRot").value;
+    overlays[activeOv].x = +document.getElementById("sOvX").value;
+    overlays[activeOv].y = +document.getElementById("sOvY").value;
+  };
+});
+
+document.getElementById("btnLibrary").onclick = () => {
+  document.getElementById("library").classList.remove("hidden");
+  refreshLibrary();
+};
+document.getElementById("btnCloseLib").onclick = () => {
+  document.getElementById("library").classList.add("hidden");
+};
+
+document.getElementById("btnFavExport").onclick = async () => {
+  const clips = (await getClips()).filter((c) => c.favorite);
+  if (!clips.length) {
+    alert("Marchează întâi clipurile bune cu ☆.");
+    return;
+  }
+  for (const c of clips) {
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(c.blob);
+    const site = (c.site || "santier").replace(/\s+/g, "_");
+    a.download = `RI_${site}_${(c.createdAt || "").slice(0, 10)}_${c.id}.webm`;
+    a.click();
+    await new Promise((r) => setTimeout(r, 400));
+  }
+};
+
+document.getElementById("btnGrid").onclick = () => {
+  document.getElementById("grid").classList.toggle("hidden");
+};
+
+let aeLocked = false;
+document.getElementById("btnLock").onclick = async () => {
+  const track = stream?.getVideoTracks?.()[0];
+  if (!track) return;
+  aeLocked = !aeLocked;
+  try {
+    await track.applyConstraints({
+      advanced: [{ exposureMode: aeLocked ? "locked" : "continuous", focusMode: aeLocked ? "locked" : "continuous" }],
     });
-}
+  } catch (_) {}
+  document.getElementById("lockBadge").classList.toggle("hidden", !aeLocked);
+};
 
-// Deschidere Player Full format cu X pentru întoarcere în rând
-function openPlayer(recording) {
-    videoPlayer.src = recording.url;
-    playbackModal.classList.remove('hidden');
-    videoPlayer.play();
-}
+document.getElementById("btnGloves").onclick = () => {
+  document.body.classList.toggle("gloves");
+};
 
-btnCloseModal.addEventListener('click', () => {
-    videoPlayer.pause();
-    videoPlayer.src = '';
-    playbackModal.classList.add('hidden');
-});
+const siteEl = document.getElementById("siteName");
+siteEl.value = localStorage.getItem("ri-site") || "";
+siteEl.oninput = () => localStorage.setItem("ri-site", siteEl.value);
 
-// Pornire lancadrare inițială
-window.addEventListener('DOMContentLoaded', () => {
-    initCamera(currentFacingMode);
-});
+window.addEventListener("resize", resizeCanvas);
+liveVideo.addEventListener("loadedmetadata", resizeCanvas);
+
+(async function init() {
+  try {
+    await startCamera();
+  } catch (e) {
+    alert("Trebuie permisă camera + microfonul. Deschide pagina pe HTTPS sau localhost.\n" + e.message);
+  }
+  drawFrame();
+  refreshLibrary();
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("sw.js").catch(() => {});
+  }
+})();
