@@ -6,11 +6,10 @@ const recBadge = document.getElementById("recBadge");
 const recTime = document.getElementById("recTime");
 const clipCount = document.getElementById("clipCount");
 const clipList = document.getElementById("clipList");
+const techInfoBadge = document.getElementById("techInfoBadge");
 
 const sBright = document.getElementById("sBright");
 const sContrast = document.getElementById("sContrast");
-const sSaturate = document.getElementById("sSaturate");
-const sZoom = document.getElementById("sZoom");
 
 const logoImg = new Image();
 const telImg = new Image();
@@ -25,23 +24,14 @@ let mediaRecorder = null;
 let recChunks = [];
 let recStarted = 0;
 let recTimer = null;
-let captureStream = null;
 
-const overlays = {
-  logo: { size: 70, rot: 0, x: 0, y: 0 },
-  tel: { size: 70, rot: 0, x: 0, y: 8 },
-};
-let activeOv = "logo";
-
-const DB_NAME = "ri-camera";
+const DB_NAME = "ri-camera-db";
 const STORE = "clips";
 
 function openDb() {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      req.result.createObjectStore(STORE, { keyPath: "id" });
-    };
+    req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "id" });
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
   });
@@ -53,54 +43,25 @@ async function saveClip(blob) {
     id: Date.now(),
     createdAt: new Date().toISOString(),
     size: blob.size,
-    type: blob.type || "video/webm",
     favorite: false,
     site: (document.getElementById("siteName").value || "santier").trim(),
     blob,
   };
-  await new Promise((resolve, reject) => {
+  await new Promise((resolve) => {
     const tx = db.transaction(STORE, "readwrite");
     tx.objectStore(STORE).put(clip);
     tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
   });
-  await refreshLibrary();
+  refreshLibrary();
 }
 
 async function getClips() {
   const db = await openDb();
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const tx = db.transaction(STORE, "readonly");
     const req = tx.objectStore(STORE).getAll();
     req.onsuccess = () => resolve(req.result.sort((a, b) => b.id - a.id));
-    req.onerror = () => reject(req.error);
   });
-}
-
-async function toggleFavorite(id) {
-  const clips = await getClips();
-  const c = clips.find((x) => x.id === id);
-  if (!c) return;
-  c.favorite = !c.favorite;
-  const db = await openDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(c);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-  await refreshLibrary();
-}
-
-async function deleteClip(id) {
-  const db = await openDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).delete(id);
-    tx.oncomplete = resolve;
-    tx.onerror = () => reject(tx.error);
-  });
-  await refreshLibrary();
 }
 
 async function refreshLibrary() {
@@ -108,7 +69,7 @@ async function refreshLibrary() {
   clipCount.textContent = clips.length;
   clipList.innerHTML = "";
   if (!clips.length) {
-    clipList.innerHTML = "<p class='hint'>Niciun clip încă. Filmează pe șantier și rămân aici.</p>";
+    clipList.innerHTML = "<p style='color:#777; font-size:12px; text-align:center; margin-top:20px;'>Niciun clip salvat încă.</p>";
     return;
   }
   for (const c of clips) {
@@ -117,63 +78,78 @@ async function refreshLibrary() {
     el.className = "clip";
     const dt = new Date(c.createdAt);
     el.innerHTML = `
-      <video src="${url}" controls playsinline></video>
+      <video src="${url}" controls playsinline webkit-playsinline></video>
       <div class="meta">
-        ${c.favorite ? "★ " : ""}${dt.toLocaleString("ro-RO")}
-        <small>${(c.size / 1024 / 1024).toFixed(1)} MB ${c.favorite ? "· CEL MAI BUN" : ""}</small>
+        <strong>${c.site}</strong><br>
+        ${dt.toLocaleTimeString("ro-RO")} <small>${(c.size / 1024 / 1024).toFixed(1)} MB</small>
       </div>
-      <button class="pill" data-act="fav">${c.favorite ? "★" : "☆"}</button>
-      <button class="pill" data-act="dl">Salvează</button>
-      <button class="pill" data-act="del">Șterge</button>
+      <button class="icon-btn" data-act="fav" title="Favorit">${c.favorite ? "★" : "☆"}</button>
+      <button class="icon-btn" data-act="dl" title="Descarcă">⬇</button>
+      <button class="icon-btn" data-act="del" title="Șterge">🗑</button>
     `;
-    el.querySelector('[data-act="fav"]').onclick = () => toggleFavorite(c.id);
+    el.querySelector('[data-act="fav"]').onclick = async () => {
+      c.favorite = !c.favorite;
+      const db = await openDb();
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).put(c);
+      tx.oncomplete = refreshLibrary;
+    };
     el.querySelector('[data-act="dl"]').onclick = () => {
       const a = document.createElement("a");
       a.href = url;
-      const site = (c.site || "santier").replace(/\s+/g, "_");
-      a.download = `RI_${site}_${dt.toISOString().slice(0,10)}_${c.id}.webm`;
+      a.download = `RI_${c.site}_${c.id}.webm`;
       a.click();
     };
-    el.querySelector('[data-act="del"]').onclick = () => deleteClip(c.id);
+    el.querySelector('[data-act="del"]').onclick = async () => {
+      const db = await openDb();
+      const tx = db.transaction(STORE, "readwrite");
+      tx.objectStore(STORE).delete(c.id);
+      tx.oncomplete = refreshLibrary;
+    };
     clipList.appendChild(el);
   }
 }
 
 async function startCamera() {
   if (stream) stream.getTracks().forEach((t) => t.stop());
-  stream = await navigator.mediaDevices.getUserMedia({
-    audio: true,
-    video: {
-      facingMode,
-      width: { ideal: 1920 },
-      height: { ideal: 1080 },
-    },
-  });
-  liveVideo.srcObject = stream;
-  await liveVideo.play();
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: {
+        facingMode,
+        width: { ideal: 1920 },
+        height: { ideal: 1080 },
+        frameRate: { ideal: 60, min: 30 }
+      },
+    });
+    liveVideo.srcObject = stream;
+    await liveVideo.play();
 
-  if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  } else if (audioCtx.state === "suspended") {
-    audioCtx.resume();
+    // Detectare FPS efectiv și rezoluție
+    const track = stream.getVideoTracks()[0];
+    const settings = track.getSettings();
+    techInfoBadge.textContent = `${settings.width || 1920}x${settings.height || 1080} / ${settings.frameRate || 60} FPS`;
+
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } else if (audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+  } catch (err) {
+    alert("Erore pornire cameră: " + err.message);
   }
-  const src = audioCtx.createMediaStreamSource(stream);
-  analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 256;
-  src.connect(analyser);
-  dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-  resizeCanvas();
 }
 
 function resizeCanvas() {
-  const maxW = canvas.clientWidth || window.innerWidth;
-  const maxH = canvas.clientHeight || window.innerHeight * 0.55;
-  const vw = liveVideo.videoWidth || 1280;
-  const vh = liveVideo.videoHeight || 720;
-  const scale = Math.min(maxW / vw, maxH / vh) || 1;
-  canvas.width = Math.round(vw * scale) || maxW;
-  canvas.height = Math.round(vh * scale) || maxH;
+  const vw = liveVideo.videoWidth || 1920;
+  const vh = liveVideo.videoHeight || 1080;
+  canvas.width = vw;
+  canvas.height = vh;
 }
 
 function drawTransparentPng(img, x, y, w, h) {
@@ -186,7 +162,7 @@ function drawTransparentPng(img, x, y, w, h) {
   const data = octx.getImageData(0, 0, off.width, off.height);
   const px = data.data;
   for (let i = 0; i < px.length; i += 4) {
-    if (px[i] < 28 && px[i + 1] < 28 && px[i + 2] < 28) px[i + 3] = 0;
+    if (px[i] < 30 && px[i + 1] < 30 && px[i + 2] < 30) px[i + 3] = 0;
   }
   octx.putImageData(data, 0, 0);
   ctx.drawImage(off, x, y, w, h);
@@ -195,102 +171,63 @@ function drawTransparentPng(img, x, y, w, h) {
 function drawFrame() {
   const w = canvas.width;
   const h = canvas.height;
-  if (!w || !h) {
-    requestAnimationFrame(drawFrame);
-    return;
-  }
-
-  const bright = sBright.value;
-  const contrast = sContrast.value;
-  const saturate = sSaturate.value;
-  const zoom = sZoom.value / 100;
-
-  ctx.save();
-  ctx.filter = `brightness(${bright}%) contrast(${contrast}%) saturate(${saturate}%)`;
-
-  const vw = liveVideo.videoWidth || w;
-  const vh = liveVideo.videoHeight || h;
-  const zw = vw / zoom;
-  const zh = vh / zoom;
-  const sx = (vw - zw) / 2;
-  const sy = (vh - zh) / 2;
-  if (liveVideo.readyState >= 2) {
-    ctx.drawImage(liveVideo, sx, sy, zw, zh, 0, 0, w, h);
-  } else {
-    ctx.fillStyle = "#000";
-    ctx.fillRect(0, 0, w, h);
-  }
-  ctx.restore();
-
-  function drawOv(img, ov, baseW) {
-    if (!img.complete || !img.naturalWidth) return;
-    const scale = ov.size / 70;
-    const dw = baseW * scale;
-    const dh = dw * (img.naturalHeight / img.naturalWidth);
-    const cx = w / 2 + (ov.x / 100) * w;
-    const cy = 16 + dh / 2 + (ov.y / 100) * h;
+  if (w && h && liveVideo.readyState >= 2) {
     ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate((ov.rot * Math.PI) / 180);
-    drawTransparentPng(img, -dw / 2, -dh / 2, dw, dh);
+    ctx.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
+    ctx.drawImage(liveVideo, 0, 0, w, h);
     ctx.restore();
-  }
-  drawOv(logoImg, overlays.logo, Math.min(w * 0.32, 240));
-  drawOv(telImg, overlays.tel, Math.min(w * 0.62, 460));
 
-  if (document.getElementById("chkDate")?.checked) {
-    const site = (document.getElementById("siteName").value || "R&I").trim();
-    const d = new Date().toLocaleDateString("ro-RO");
-    ctx.save();
-    ctx.font = `600 ${Math.max(12, Math.round(w * 0.022))}px sans-serif`;
-    ctx.fillStyle = "rgba(255,255,255,.88)";
-    ctx.textAlign = "right";
-    ctx.fillText(`${site} · ${d}`, w - 12, h - 14);
-    ctx.restore();
+    // Logo stânga sus / Telefon dreapta sus pe randare
+    const logoSize = w * 0.18;
+    drawTransparentPng(logoImg, 30, 30, logoSize, logoSize * (logoImg.naturalHeight / logoImg.naturalWidth || 0.5));
+    
+    const telSize = w * 0.28;
+    drawTransparentPng(telImg, w - telSize - 30, 30, telSize, telSize * (telImg.naturalHeight / telImg.naturalWidth || 0.3));
+
+    if (document.getElementById("chkDate")?.checked) {
+      const site = (document.getElementById("siteName").value || "Șantier").trim();
+      const d = new Date().toLocaleString("ro-RO");
+      ctx.save();
+      ctx.font = `bold ${Math.max(16, Math.round(w * 0.022))}px sans-serif`;
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.textAlign = "right";
+      ctx.fillText(`${site} | ${d}`, w - 30, h - 30);
+      ctx.restore();
+    }
   }
 
   if (analyser && dataArray) {
     analyser.getByteTimeDomainData(dataArray);
     let peak = 0;
-    for (let i = 0; i < dataArray.length; i++) {
-      peak = Math.max(peak, Math.abs(dataArray[i] - 128));
-    }
-    const pct = Math.min(100, (peak / 128) * 160);
-    vuFill.style.height = `${Math.max(6, pct)}%`;
+    for (let i = 0; i < dataArray.length; i++) peak = Math.max(peak, Math.abs(dataArray[i] - 128));
+    vuFill.style.height = `${Math.min(100, Math.max(5, (peak / 128) * 140))}%`;
   }
 
   requestAnimationFrame(drawFrame);
 }
 
-function mimeType() {
-  const types = [
-    "video/webm;codecs=vp9,opus",
-    "video/webm;codecs=vp8,opus",
-    "video/webm",
-    "video/mp4",
-  ];
-  return types.find((t) => MediaRecorder.isTypeSupported(t)) || "";
-}
-
+// Înregistrare Video
 function startRecording() {
-  captureStream = canvas.captureStream(30);
+  const streamToCapture = canvas.captureStream(60);
   const audioTracks = stream.getAudioTracks();
-  if (audioTracks.length) captureStream.addTrack(audioTracks[0]);
+  if (audioTracks.length) streamToCapture.addTrack(audioTracks[0]);
 
   recChunks = [];
-  mediaRecorder = new MediaRecorder(captureStream, { mimeType: mimeType(), videoBitsPerSecond: 6_000_000 });
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data && e.data.size) recChunks.push(e.data);
+  const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+  mediaRecorder = new MediaRecorder(streamToCapture, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recChunks, { type: mime });
+    saveClip(blob);
   };
-  mediaRecorder.onstop = async () => {
-    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || "video/webm" });
-    await saveClip(blob);
-  };
+  
   mediaRecorder.start(250);
   recording = true;
   recStarted = Date.now();
   recBadge.classList.remove("hidden");
   document.getElementById("btnRec").classList.add("on");
+  
   recTimer = setInterval(() => {
     const s = Math.floor((Date.now() - recStarted) / 1000);
     const mm = String(Math.floor(s / 60)).padStart(2, "0");
@@ -308,16 +245,19 @@ function stopRecording() {
 }
 
 document.getElementById("btnRec").onclick = () => {
-  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
   recording ? stopRecording() : startRecording();
 };
 
-document.getElementById("btnFlip").onclick = async () => {
+// Butoane Control
+document.getElementById("btnFlipMicro").onclick = async () => {
   facingMode = facingMode === "environment" ? "user" : "environment";
   await startCamera();
 };
 
-// Fullscreen
+document.getElementById("btnHideCtrl").onclick = () => {
+  document.getElementById("controlPanel").classList.toggle("hidden-panel");
+};
+
 document.getElementById("btnFullscreen").onclick = () => {
   if (!document.fullscreenElement) {
     document.documentElement.requestFullscreen().catch(() => {});
@@ -326,35 +266,26 @@ document.getElementById("btnFullscreen").onclick = () => {
   }
 };
 
+let locked = false;
+document.getElementById("btnLock").onclick = async () => {
+  locked = !locked;
+  const track = stream?.getVideoTracks()[0];
+  if (track) {
+    try {
+      await track.applyConstraints({ advanced: [{ focusMode: locked ? "locked" : "continuous", exposureMode: locked ? "locked" : "continuous" }] });
+    } catch (_) {}
+  }
+  document.getElementById("lockBadge").classList.toggle("hidden", !locked);
+};
+
+document.getElementById("btnGrid").onclick = () => {
+  // Opțional toggle grid dacă e cazul
+};
+
 document.getElementById("btnReset").onclick = () => {
   sBright.value = 100;
   sContrast.value = 100;
-  sSaturate.value = 110;
-  sZoom.value = 100;
-  overlays.logo = { size: 70, rot: 0, x: 0, y: 0 };
-  overlays.tel = { size: 70, rot: 0, x: 0, y: 8 };
-  syncOvSliders();
 };
-
-function syncOvSliders() {
-  const o = overlays[activeOv];
-  document.getElementById("sOvSize").value = o.size;
-  document.getElementById("sOvRot").value = o.rot;
-  document.getElementById("sOvX").value = o.x;
-  document.getElementById("sOvY").value = o.y;
-  document.getElementById("tabLogo").classList.toggle("on", activeOv === "logo");
-  document.getElementById("tabTel").classList.toggle("on", activeOv === "tel");
-}
-document.getElementById("tabLogo").onclick = () => { activeOv = "logo"; syncOvSliders(); };
-document.getElementById("tabTel").onclick = () => { activeOv = "tel"; syncOvSliders(); };
-["sOvSize", "sOvRot", "sOvX", "sOvY"].forEach((id) => {
-  document.getElementById(id).oninput = () => {
-    overlays[activeOv].size = +document.getElementById("sOvSize").value;
-    overlays[activeOv].rot = +document.getElementById("sOvRot").value;
-    overlays[activeOv].x = +document.getElementById("sOvX").value;
-    overlays[activeOv].y = +document.getElementById("sOvY").value;
-  };
-});
 
 document.getElementById("btnLibrary").onclick = () => {
   document.getElementById("library").classList.remove("hidden");
@@ -364,59 +295,16 @@ document.getElementById("btnCloseLib").onclick = () => {
   document.getElementById("library").classList.add("hidden");
 };
 
-document.getElementById("btnFavExport").onclick = async () => {
-  const clips = (await getClips()).filter((c) => c.favorite);
-  if (!clips.length) {
-    alert("Marchează întâi clipurile bune cu ☆.");
-    return;
-  }
-  for (const c of clips) {
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(c.blob);
-    const site = (c.site || "santier").replace(/\s+/g, "_");
-    a.download = `RI_${site}_${(c.createdAt || "").slice(0, 10)}_${c.id}.webm`;
-    a.click();
-    await new Promise((r) => setTimeout(r, 400));
-  }
-};
+const siteInput = document.getElementById("siteName");
+siteInput.value = localStorage.getItem("ri_site_name") || "";
+siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
 
-document.getElementById("btnGrid").onclick = () => {
-  document.getElementById("grid").classList.toggle("hidden");
-};
-
-let aeLocked = false;
-document.getElementById("btnLock").onclick = async () => {
-  const track = stream?.getVideoTracks?.()[0];
-  if (!track) return;
-  aeLocked = !aeLocked;
-  try {
-    await track.applyConstraints({
-      advanced: [{ exposureMode: aeLocked ? "locked" : "continuous", focusMode: aeLocked ? "locked" : "continuous" }],
-    });
-  } catch (_) {}
-  document.getElementById("lockBadge").classList.toggle("hidden", !aeLocked);
-};
-
-document.getElementById("btnGloves").onclick = () => {
-  document.body.classList.toggle("gloves");
-};
-
-const siteEl = document.getElementById("siteName");
-siteEl.value = localStorage.getItem("ri-site") || "";
-siteEl.oninput = () => localStorage.setItem("ri-site", siteEl.value);
-
-window.addEventListener("resize", resizeCanvas);
-liveVideo.addEventListener("loadedmetadata", resizeCanvas);
-
-(async function init() {
-  try {
-    await startCamera();
-  } catch (e) {
-    alert("Trebuie permisă camera + microfonul. Deschide pagina pe HTTPS sau localhost.\n" + e.message);
-  }
+liveVideo.addEventListener("loadedmetadata", () => {
+  resizeCanvas();
   drawFrame();
+});
+
+(async () => {
+  await startCamera();
   refreshLibrary();
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("sw.js").catch(() => {});
-  }
 })();
