@@ -1,4 +1,8 @@
 const liveVideo = document.getElementById("liveVideo");
+const stageCanvas = document.getElementById("stageCanvas");
+const ctx = stageCanvas.getContext("2d");
+const stageArea = document.getElementById("stageArea") || document.querySelector(".stage");
+
 const vuFill = document.getElementById("vuFill");
 const recBadge = document.getElementById("recBadge");
 const recTime = document.getElementById("recTime");
@@ -9,9 +13,18 @@ const techInfoBadge = document.getElementById("techInfoBadge");
 const sBright = document.getElementById("sBright");
 const sContrast = document.getElementById("sContrast");
 
+const draggableLogo = document.getElementById("draggableLogo");
+const draggableSite = document.getElementById("draggableSite");
+const logoImg = draggableLogo.querySelector("img");
+const siteImgEl = draggableSite.querySelector("img");
+
 let stream = null;
 let facingMode = "environment";
+
 let audioCtx, analyser, dataArray;
+let destNode = null;
+let micSourceNode = null;
+
 let recording = false;
 let mediaRecorder = null;
 let recChunks = [];
@@ -99,9 +112,9 @@ async function refreshLibrary() {
 }
 
 async function startCamera() {
-  if (stream) stream.getTracks().forEach((t) => t.stop());
+  const oldStream = stream;
   try {
-    stream = await navigator.mediaDevices.getUserMedia({
+    const newStream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: {
         facingMode,
@@ -110,26 +123,51 @@ async function startCamera() {
         frameRate: { ideal: 60, min: 30 }
       },
     });
-    liveVideo.srcObject = stream;
-    await liveVideo.play();
 
-    const track = stream.getVideoTracks()[0];
+    liveVideo.srcObject = newStream;
+    await liveVideo.play();
+    stream = newStream;
+
+    const track = newStream.getVideoTracks()[0];
     const settings = track.getSettings();
-    techInfoBadge.textContent = `${settings.width || 1920}x${settings.height || 1080} / ${settings.frameRate || 60} FPS`;
+    const vw = settings.width || 1920;
+    const vh = settings.height || 1080;
+    if (stageCanvas.width !== vw || stageCanvas.height !== vh) {
+      stageCanvas.width = vw;
+      stageCanvas.height = vh;
+    }
+    techInfoBadge.textContent = `${vw}x${vh} / ${Math.round(settings.frameRate || 60)} FPS`;
 
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     } else if (audioCtx.state === "suspended") {
       audioCtx.resume();
     }
-    const src = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 256;
-    src.connect(analyser);
-    dataArray = new Uint8Array(analyser.frequencyBinCount);
-    monitorAudio();
+    if (!destNode) {
+      destNode = audioCtx.createMediaStreamDestination();
+    }
+    if (!analyser) {
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+      monitorAudio();
+    }
+
+    if (micSourceNode) {
+      try { micSourceNode.disconnect(); } catch (_) {}
+    }
+    micSourceNode = audioCtx.createMediaStreamSource(newStream);
+    micSourceNode.connect(destNode);
+    micSourceNode.connect(analyser);
+
+    if (oldStream) oldStream.getTracks().forEach((t) => t.stop());
+
+    if (!drawLoopStarted) {
+      drawLoopStarted = true;
+      requestAnimationFrame(drawFrame);
+    }
   } catch (err) {
-    alert("Erore pornire cameră: " + err.message);
+    alert("Eroare pornire cameră: " + err.message);
   }
 }
 
@@ -142,43 +180,79 @@ function monitorAudio() {
   requestAnimationFrame(monitorAudio);
 }
 
-function updateFilters() {
-  liveVideo.style.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
+let drawLoopStarted = false;
+
+function drawFrame() {
+  if (liveVideo.readyState >= 2 && stageCanvas.width && stageCanvas.height) {
+    ctx.save();
+    ctx.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
+    ctx.drawImage(liveVideo, 0, 0, stageCanvas.width, stageCanvas.height);
+    ctx.restore();
+
+    drawOverlayImage(logoImg, draggableLogo);
+    drawOverlayImage(siteImgEl, draggableSite);
+  }
+  requestAnimationFrame(drawFrame);
 }
-sBright.oninput = updateFilters;
-sContrast.oninput = updateFilters;
+
+function getCoverTransform() {
+  const rect = stageArea.getBoundingClientRect();
+  const iw = stageCanvas.width || 1;
+  const ih = stageCanvas.height || 1;
+  const s = Math.max(rect.width / iw, rect.height / ih) || 1;
+  return {
+    s,
+    offsetX: (iw * s - rect.width) / 2,
+    offsetY: (ih * s - rect.height) / 2,
+  };
+}
+
+function drawOverlayImage(imgEl, wrapperEl) {
+  if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) return;
+  const t = getCoverTransform();
+  const cssX = wrapperEl.offsetLeft;
+  const cssY = wrapperEl.offsetTop;
+  const cssW = wrapperEl.offsetWidth;
+  const cssH = wrapperEl.offsetHeight;
+  const cx = (cssX + t.offsetX) / t.s;
+  const cy = (cssY + t.offsetY) / t.s;
+  const cw = cssW / t.s;
+  const ch = cssH / t.s;
+  ctx.drawImage(imgEl, cx, cy, cw, ch);
+}
 
 function startRecording() {
-  if (liveVideo.captureStream) {
-    recChunks = [];
-    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
-    
-    const recordStream = liveVideo.captureStream();
-    const audioTracks = stream.getAudioTracks();
-    if (audioTracks.length) recordStream.addTrack(audioTracks[0]);
-
-    mediaRecorder = new MediaRecorder(recordStream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
-    mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recChunks, { type: mime });
-      saveClip(blob);
-    };
-    
-    mediaRecorder.start(250);
-    recording = true;
-    recStarted = Date.now();
-    recBadge.classList.remove("hidden");
-    document.getElementById("btnRec").classList.add("on");
-    
-    recTimer = setInterval(() => {
-      const s = Math.floor((Date.now() - recStarted) / 1000);
-      const mm = String(Math.floor(s / 60)).padStart(2, "0");
-      const ss = String(s % 60).padStart(2, "0");
-      recTime.textContent = `${mm}:${ss}`;
-    }, 250);
-  } else {
-    alert("Browserul tău nu suportă înregistrarea directă din video stream.");
+  if (!stageCanvas.captureStream) {
+    alert("Browserul tău nu suportă înregistrarea din canvas.");
+    return;
   }
+  recChunks = [];
+  const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+
+  const canvasStream = stageCanvas.captureStream(30);
+  const recordStream = new MediaStream();
+  canvasStream.getVideoTracks().forEach((t) => recordStream.addTrack(t));
+  if (destNode) destNode.stream.getAudioTracks().forEach((t) => recordStream.addTrack(t));
+
+  mediaRecorder = new MediaRecorder(recordStream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+  mediaRecorder.onstop = () => {
+    const blob = new Blob(recChunks, { type: mime });
+    saveClip(blob);
+  };
+
+  mediaRecorder.start(250);
+  recording = true;
+  recStarted = Date.now();
+  recBadge.classList.remove("hidden");
+  document.getElementById("btnRec").classList.add("on");
+
+  recTimer = setInterval(() => {
+    const s = Math.floor((Date.now() - recStarted) / 1000);
+    const mm = String(Math.floor(s / 60)).padStart(2, "0");
+    const ss = String(s % 60).padStart(2, "0");
+    recTime.textContent = `${mm}:${ss}`;
+  }, 250);
 }
 
 function stopRecording() {
@@ -226,7 +300,6 @@ document.getElementById("btnLock").onclick = async () => {
 document.getElementById("btnReset").onclick = () => {
   sBright.value = 100;
   sContrast.value = 100;
-  updateFilters();
 };
 
 document.getElementById("btnLibrary").onclick = () => {
@@ -250,6 +323,10 @@ function makeDraggable(elm) {
     elm.style.left = savedX + "px";
     elm.style.top = savedY + "px";
     elm.style.right = "auto";
+  }
+  const savedW = localStorage.getItem(elm.id + "_w");
+  if (savedW !== null) {
+    elm.style.width = savedW + "px";
   }
 
   elm.onpointerdown = dragMouseDown;
@@ -282,8 +359,36 @@ function makeDraggable(elm) {
   }
 }
 
-makeDraggable(document.getElementById("draggableLogo"));
-makeDraggable(document.getElementById("draggableSite"));
+function makeResizable(elm, minWidth, maxWidth) {
+  const handle = elm.querySelector(".resize-handle");
+  if (!handle) return;
+  let startW = 0, startX = 0;
+
+  handle.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    startW = elm.offsetWidth;
+    startX = e.clientX;
+
+    const move = (ev) => {
+      const dx = ev.clientX - startX;
+      const newW = Math.min(maxWidth, Math.max(minWidth, startW + dx));
+      elm.style.width = newW + "px";
+    };
+    const up = () => {
+      document.removeEventListener("pointermove", move);
+      document.removeEventListener("pointerup", up);
+      localStorage.setItem(elm.id + "_w", elm.offsetWidth);
+    };
+    document.addEventListener("pointermove", move);
+    document.addEventListener("pointerup", up);
+  });
+}
+
+makeDraggable(draggableLogo);
+makeDraggable(draggableSite);
+makeResizable(draggableLogo, 40, 320);
+makeResizable(draggableSite, 40, 320);
 
 (async () => {
   await startCamera();
