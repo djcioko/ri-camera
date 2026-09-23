@@ -13,21 +13,27 @@
 <body>
   <div id="app">
     <header class="topbar">
-      <img src="assets/logo.png" alt="R&I" class="top-logo" />
       <div class="top-meta">
         <strong>R&amp;I CAMERA</strong>
         <input id="siteName" type="text" placeholder="Nume șantier (ex. Pipera)" />
       </div>
-      <button id="btnFlip" class="icon-btn" title="Față / Spate">🔄</button>
       <button id="btnHideCtrl" class="icon-btn" title="Ascunde / Arată Controale">👁️</button>
       <button id="btnLibrary" class="icon-btn" title="Arhivă clipuri">📁 <span id="clipCount">0</span></button>
     </header>
 
-    <main class="stage">
+    <main class="stage" id="stageArea">
       <video id="liveVideo" playsinline muted autoplay></video>
       
-      <div class="watermark-logo"><img src="assets/logo.png" alt="Logo" /></div>
-      <div class="watermark-tel"><img src="assets/telefon.png" alt="Telefon" /></div>
+      <!-- Elemente vizibile și mutabile pe ecran (Drag & Drop) -->
+      <div id="draggableLogo" class="watermark-logo" title="Trage de logo să-l muți">
+        <img src="assets/logo.png" alt="Logo" />
+      </div>
+      <div id="draggableTel" class="watermark-tel" title="Trage de telefon să-l muți">
+        <img src="assets/telefon.png" alt="Telefon" />
+      </div>
+
+      <!-- Buton mare Flip Cameră direct pe ecran -->
+      <button id="btnFlipBig" class="big-flip-btn" title="Schimbă Camera Față / Spate">🔄</button>
 
       <div class="hud-top-left"><span id="techInfoBadge" class="tech-badge">1080p / 60 FPS</span></div>
       <div id="recBadge" class="rec-badge hidden">● REC <span id="recTime">00:00</span></div>
@@ -56,13 +62,10 @@
 
   <aside id="library" class="drawer hidden">
     <div class="drawer-head">
-      <h2>Arhivă Filmată</h2>
+      <h2>Arhivă Filmată (Play & Download)</h2>
       <button id="btnCloseLib" class="icon-btn">✕ Închide</button>
     </div>
     <div id="clipList" class="clip-list"></div>
-    <div class="drawer-foot">
-      <button id="btnFavExport" class="pill wide">★ Descarcă clipurile favorite</button>
-    </div>
   </aside>
 
   <script src="app.js"></script>
