@@ -189,7 +189,6 @@ document.getElementById("btnRec").onclick = () => {
   recording ? stopRecording() : startRecording();
 };
 
-// Comutare cameră prin butonul mare dedicat
 async function flipCamera() {
   facingMode = facingMode === "environment" ? "user" : "environment";
   await startCamera();
@@ -238,11 +237,10 @@ const siteInput = document.getElementById("siteName");
 siteInput.value = localStorage.getItem("ri_site_name") || "";
 siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
 
-// Funcționalitate Drag & Drop (Mutat elemente pe ecran și salvare poziție)
+// Drag & Drop compatibil atât cu Mouse cât și cu Touch (Mobil)
 function makeDraggable(elm) {
-  let startX = 0, startY = 0, initialX = 0, initialY = 0;
-  
-  // Încărcare poziție salvată anterior
+  let posX = 0, posY = 0, mouseX = 0, mouseY = 0;
+
   const savedX = localStorage.getItem(elm.id + "_x");
   const savedY = localStorage.getItem(elm.id + "_y");
   if (savedX !== null && savedY !== null) {
@@ -255,24 +253,21 @@ function makeDraggable(elm) {
 
   function dragMouseDown(e) {
     e.preventDefault();
-    initialX = e.clientX;
-    initialY = e.clientY;
+    mouseX = e.clientX;
+    mouseY = e.clientY;
     document.onpointermove = elementDrag;
     document.onpointerup = closeDragElement;
   }
 
   function elementDrag(e) {
     e.preventDefault();
-    startX = initialX - e.clientX;
-    startY = initialY - e.clientY;
-    initialX = e.clientX;
-    initialY = e.clientY;
-    
-    let newTop = elm.offsetTop - startY;
-    let newLeft = elm.offsetLeft - startX;
-    
-    elm.style.top = newTop + "px";
-    elm.style.left = newLeft + "px";
+    posX = mouseX - e.clientX;
+    posY = mouseY - e.clientY;
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+
+    elm.style.top = (elm.offsetTop - posY) + "px";
+    elm.style.left = (elm.offsetLeft - posX) + "px";
     elm.style.right = "auto";
   }
 
