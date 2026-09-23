@@ -1,6 +1,4 @@
 const liveVideo = document.getElementById("liveVideo");
-const canvas = document.getElementById("previewCanvas");
-const ctx = canvas.getContext("2d");
 const vuFill = document.getElementById("vuFill");
 const recBadge = document.getElementById("recBadge");
 const recTime = document.getElementById("recTime");
@@ -10,11 +8,6 @@ const techInfoBadge = document.getElementById("techInfoBadge");
 
 const sBright = document.getElementById("sBright");
 const sContrast = document.getElementById("sContrast");
-
-const logoImg = new Image();
-const telImg = new Image();
-logoImg.src = "assets/logo.png";
-telImg.src = "assets/telefon.png";
 
 let stream = null;
 let facingMode = "environment";
@@ -125,7 +118,6 @@ async function startCamera() {
     liveVideo.srcObject = stream;
     await liveVideo.play();
 
-    // Detectare FPS efectiv și rezoluție
     const track = stream.getVideoTracks()[0];
     const settings = track.getSettings();
     techInfoBadge.textContent = `${settings.width || 1920}x${settings.height || 1080} / ${settings.frameRate || 60} FPS`;
@@ -140,100 +132,60 @@ async function startCamera() {
     analyser.fftSize = 256;
     src.connect(analyser);
     dataArray = new Uint8Array(analyser.frequencyBinCount);
+    monitorAudio();
   } catch (err) {
     alert("Erore pornire cameră: " + err.message);
   }
 }
 
-function resizeCanvas() {
-  const vw = liveVideo.videoWidth || 1920;
-  const vh = liveVideo.videoHeight || 1080;
-  canvas.width = vw;
-  canvas.height = vh;
+function monitorAudio() {
+  if (!analyser || !dataArray) return;
+  analyser.getByteTimeDomainData(dataArray);
+  let peak = 0;
+  for (let i = 0; i < dataArray.length; i++) peak = Math.max(peak, Math.abs(dataArray[i] - 128));
+  vuFill.style.height = `${Math.min(100, Math.max(5, (peak / 128) * 140))}%`;
+  requestAnimationFrame(monitorAudio);
 }
 
-function drawTransparentPng(img, x, y, w, h) {
-  if (!img.complete || !img.naturalWidth) return;
-  const off = document.createElement("canvas");
-  off.width = img.naturalWidth;
-  off.height = img.naturalHeight;
-  const octx = off.getContext("2d");
-  octx.drawImage(img, 0, 0);
-  const data = octx.getImageData(0, 0, off.width, off.height);
-  const px = data.data;
-  for (let i = 0; i < px.length; i += 4) {
-    if (px[i] < 30 && px[i + 1] < 30 && px[i + 2] < 30) px[i + 3] = 0;
-  }
-  octx.putImageData(data, 0, 0);
-  ctx.drawImage(off, x, y, w, h);
+// Filtre live direct pe elementul video
+function updateFilters() {
+  liveVideo.style.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
 }
+sBright.oninput = updateFilters;
+sContrast.oninput = updateFilters;
 
-function drawFrame() {
-  const w = canvas.width;
-  const h = canvas.height;
-  if (w && h && liveVideo.readyState >= 2) {
-    ctx.save();
-    ctx.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
-    ctx.drawImage(liveVideo, 0, 0, w, h);
-    ctx.restore();
-
-    // Logo stânga sus / Telefon dreapta sus pe randare
-    const logoSize = w * 0.18;
-    drawTransparentPng(logoImg, 30, 30, logoSize, logoSize * (logoImg.naturalHeight / logoImg.naturalWidth || 0.5));
-    
-    const telSize = w * 0.28;
-    drawTransparentPng(telImg, w - telSize - 30, 30, telSize, telSize * (telImg.naturalHeight / telImg.naturalWidth || 0.3));
-
-    if (document.getElementById("chkDate")?.checked) {
-      const site = (document.getElementById("siteName").value || "Șantier").trim();
-      const d = new Date().toLocaleString("ro-RO");
-      ctx.save();
-      ctx.font = `bold ${Math.max(16, Math.round(w * 0.022))}px sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.9)";
-      ctx.textAlign = "right";
-      ctx.fillText(`${site} | ${d}`, w - 30, h - 30);
-      ctx.restore();
-    }
-  }
-
-  if (analyser && dataArray) {
-    analyser.getByteTimeDomainData(dataArray);
-    let peak = 0;
-    for (let i = 0; i < dataArray.length; i++) peak = Math.max(peak, Math.abs(dataArray[i] - 128));
-    vuFill.style.height = `${Math.min(100, Math.max(5, (peak / 128) * 140))}%`;
-  }
-
-  requestAnimationFrame(drawFrame);
-}
-
-// Înregistrare Video
+// Înregistrare Video Directă din Stream
 function startRecording() {
-  const streamToCapture = canvas.captureStream(60);
-  const audioTracks = stream.getAudioTracks();
-  if (audioTracks.length) streamToCapture.addTrack(audioTracks[0]);
+  if (liveVideo.captureStream) {
+    recChunks = [];
+    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+    
+    const recordStream = liveVideo.captureStream();
+    const audioTracks = stream.getAudioTracks();
+    if (audioTracks.length) recordStream.addTrack(audioTracks[0]);
 
-  recChunks = [];
-  const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
-  mediaRecorder = new MediaRecorder(streamToCapture, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
-  
-  mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recChunks, { type: mime });
-    saveClip(blob);
-  };
-  
-  mediaRecorder.start(250);
-  recording = true;
-  recStarted = Date.now();
-  recBadge.classList.remove("hidden");
-  document.getElementById("btnRec").classList.add("on");
-  
-  recTimer = setInterval(() => {
-    const s = Math.floor((Date.now() - recStarted) / 1000);
-    const mm = String(Math.floor(s / 60)).padStart(2, "0");
-    const ss = String(s % 60).padStart(2, "0");
-    recTime.textContent = `${mm}:${ss}`;
-  }, 250);
+    mediaRecorder = new MediaRecorder(recordStream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
+    mediaRecorder.onstop = () => {
+      const blob = new Blob(recChunks, { type: mime });
+      saveClip(blob);
+    };
+    
+    mediaRecorder.start(250);
+    recording = true;
+    recStarted = Date.now();
+    recBadge.classList.remove("hidden");
+    document.getElementById("btnRec").classList.add("on");
+    
+    recTimer = setInterval(() => {
+      const s = Math.floor((Date.now() - recStarted) / 1000);
+      const mm = String(Math.floor(s / 60)).padStart(2, "0");
+      const ss = String(s % 60).padStart(2, "0");
+      recTime.textContent = `${mm}:${ss}`;
+    }, 250);
+  } else {
+    alert("Browserul tău nu suportă înregistrarea directă din video stream.");
+  }
 }
 
 function stopRecording() {
@@ -248,8 +200,7 @@ document.getElementById("btnRec").onclick = () => {
   recording ? stopRecording() : startRecording();
 };
 
-// Butoane Control
-document.getElementById("btnFlipMicro").onclick = async () => {
+document.getElementById("btnFlip").onclick = async () => {
   facingMode = facingMode === "environment" ? "user" : "environment";
   await startCamera();
 };
@@ -278,13 +229,10 @@ document.getElementById("btnLock").onclick = async () => {
   document.getElementById("lockBadge").classList.toggle("hidden", !locked);
 };
 
-document.getElementById("btnGrid").onclick = () => {
-  // Opțional toggle grid dacă e cazul
-};
-
 document.getElementById("btnReset").onclick = () => {
   sBright.value = 100;
   sContrast.value = 100;
+  updateFilters();
 };
 
 document.getElementById("btnLibrary").onclick = () => {
@@ -298,11 +246,6 @@ document.getElementById("btnCloseLib").onclick = () => {
 const siteInput = document.getElementById("siteName");
 siteInput.value = localStorage.getItem("ri_site_name") || "";
 siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
-
-liveVideo.addEventListener("loadedmetadata", () => {
-  resizeCanvas();
-  drawFrame();
-});
 
 (async () => {
   await startCamera();
