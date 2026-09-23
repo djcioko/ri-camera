@@ -36,7 +36,6 @@ async function saveClip(blob) {
     id: Date.now(),
     createdAt: new Date().toISOString(),
     size: blob.size,
-    favorite: false,
     site: (document.getElementById("siteName").value || "santier").trim(),
     blob,
   };
@@ -62,7 +61,7 @@ async function refreshLibrary() {
   clipCount.textContent = clips.length;
   clipList.innerHTML = "";
   if (!clips.length) {
-    clipList.innerHTML = "<p style='color:#777; font-size:12px; text-align:center; margin-top:20px;'>Niciun clip salvat încă.</p>";
+    clipList.innerHTML = "<p style='color:#777; font-size:12px; text-align:center; margin-top:20px;'>Niciun clip salvat încă în arhivă.</p>";
     return;
   }
   for (const c of clips) {
@@ -71,22 +70,14 @@ async function refreshLibrary() {
     el.className = "clip";
     const dt = new Date(c.createdAt);
     el.innerHTML = `
-      <video src="${url}" controls playsinline webkit-playsinline></video>
+      <video src="${url}" controls playsinline webkit-playsinline preload="metadata"></video>
       <div class="meta">
         <strong>${c.site}</strong><br>
         ${dt.toLocaleTimeString("ro-RO")} <small>${(c.size / 1024 / 1024).toFixed(1)} MB</small>
       </div>
-      <button class="icon-btn" data-act="fav" title="Favorit">${c.favorite ? "★" : "☆"}</button>
-      <button class="icon-btn" data-act="dl" title="Descarcă">⬇</button>
+      <button class="icon-btn" data-act="dl" title="Descarcă clipul">⬇</button>
       <button class="icon-btn" data-act="del" title="Șterge">🗑</button>
     `;
-    el.querySelector('[data-act="fav"]').onclick = async () => {
-      c.favorite = !c.favorite;
-      const db = await openDb();
-      const tx = db.transaction(STORE, "readwrite");
-      tx.objectStore(STORE).put(c);
-      tx.oncomplete = refreshLibrary;
-    };
     el.querySelector('[data-act="dl"]').onclick = () => {
       const a = document.createElement("a");
       a.href = url;
@@ -198,10 +189,12 @@ document.getElementById("btnRec").onclick = () => {
   recording ? stopRecording() : startRecording();
 };
 
-document.getElementById("btnFlip").onclick = async () => {
+// Comutare cameră prin butonul mare dedicat
+async function flipCamera() {
   facingMode = facingMode === "environment" ? "user" : "environment";
   await startCamera();
-};
+}
+document.getElementById("btnFlipBig").onclick = flipCamera;
 
 document.getElementById("btnHideCtrl").onclick = () => {
   document.getElementById("controlPanel").classList.toggle("hidden-panel");
@@ -244,6 +237,55 @@ document.getElementById("btnCloseLib").onclick = () => {
 const siteInput = document.getElementById("siteName");
 siteInput.value = localStorage.getItem("ri_site_name") || "";
 siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
+
+// Funcționalitate Drag & Drop (Mutat elemente pe ecran și salvare poziție)
+function makeDraggable(elm) {
+  let startX = 0, startY = 0, initialX = 0, initialY = 0;
+  
+  // Încărcare poziție salvată anterior
+  const savedX = localStorage.getItem(elm.id + "_x");
+  const savedY = localStorage.getItem(elm.id + "_y");
+  if (savedX !== null && savedY !== null) {
+    elm.style.left = savedX + "px";
+    elm.style.top = savedY + "px";
+    elm.style.right = "auto";
+  }
+
+  elm.onpointerdown = dragMouseDown;
+
+  function dragMouseDown(e) {
+    e.preventDefault();
+    initialX = e.clientX;
+    initialY = e.clientY;
+    document.onpointermove = elementDrag;
+    document.onpointerup = closeDragElement;
+  }
+
+  function elementDrag(e) {
+    e.preventDefault();
+    startX = initialX - e.clientX;
+    startY = initialY - e.clientY;
+    initialX = e.clientX;
+    initialY = e.clientY;
+    
+    let newTop = elm.offsetTop - startY;
+    let newLeft = elm.offsetLeft - startX;
+    
+    elm.style.top = newTop + "px";
+    elm.style.left = newLeft + "px";
+    elm.style.right = "auto";
+  }
+
+  function closeDragElement() {
+    document.onpointermove = null;
+    document.onpointerup = null;
+    localStorage.setItem(elm.id + "_x", elm.offsetLeft);
+    localStorage.setItem(elm.id + "_y", elm.offsetTop);
+  }
+}
+
+makeDraggable(document.getElementById("draggableLogo"));
+makeDraggable(document.getElementById("draggableTel"));
 
 (async () => {
   await startCamera();
