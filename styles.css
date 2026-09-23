@@ -28,40 +28,52 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .stage { position: relative; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; touch-action: none; }
 #liveVideo { width: 100%; height: 100%; object-fit: cover; background: #000; }
 
-/* Elemente mutabile (Drag & Drop pe ecran) */
-.watermark-logo { position: absolute; top: 16px; left: 16px; width: 85px; cursor: grab; z-index: 6; user-select: none; }
-.watermark-logo img { width: 100%; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)); pointer-events: none; }
+/* Elemente mutabile direct pe ecran (Drag & Drop optimizat mobil) */
+.draggable-item {
+  position: absolute;
+  cursor: move;
+  z-index: 6;
+  user-select: none;
+  touch-action: none;
+  padding: 4px;
+  border: 1px dashed rgba(226, 193, 74, 0.4);
+  border-radius: 6px;
+  background: rgba(0,0,0,0.2);
+}
 
-.watermark-tel { position: absolute; top: 16px; right: 70px; width: 130px; cursor: grab; z-index: 6; user-select: none; }
-.watermark-tel img { width: 100%; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)); pointer-events: none; }
+#draggableLogo { top: 20px; left: 20px; width: 90px; }
+#draggableLogo img { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)); pointer-events: none; }
+
+#draggableTel { top: 20px; right: 20px; width: 130px; }
+#draggableTel img { width: 100%; height: auto; display: block; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)); pointer-events: none; }
 
 /* Buton mare cameră față/spate plasat pe ecran */
 .big-flip-btn {
-  position: absolute; top: 16px; right: 16px; z-index: 7;
-  background: rgba(28, 28, 28, 0.85); color: #fff; border: 2px solid var(--gold);
-  border-radius: 50%; width: 46px; height: 46px; font-size: 20px;
+  position: absolute; bottom: 90px; right: 16px; z-index: 7;
+  background: rgba(28, 28, 28, 0.9); color: #fff; border: 2px solid var(--gold);
+  border-radius: 50%; width: 56px; height: 56px; font-size: 24px;
   display: flex; align-items: center; justify-content: center; cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.6);
 }
 
 .hud-top-left { position: absolute; bottom: 12px; left: 12px; z-index: 5; pointer-events: none; }
 .tech-badge { background: rgba(0,0,0,0.7); color: var(--gold); border: 1px solid rgba(226,193,74,0.3); font-size: 10px; padding: 3px 6px; border-radius: 4px; font-weight: 600; }
 
 .rec-badge {
-  position: absolute; top: 75px; right: 16px; z-index: 5;
+  position: absolute; top: 120px; right: 16px; z-index: 5;
   background: var(--rec); color: #fff; font-weight: 700;
   padding: 4px 10px; border-radius: 999px; font-size: 12px;
   letter-spacing: .04em; display: flex; align-items: center; gap: 6px;
 }
 .lock-badge {
-  position: absolute; left: 12px; top: 75px; z-index: 5;
+  position: absolute; left: 12px; top: 120px; z-index: 5;
   background: var(--gold); color: #111; font-size: 10px; font-weight: 700;
   padding: 3px 8px; border-radius: 6px;
 }
 .hidden { display: none !important; }
 
 .vu-wrap {
-  position: absolute; right: 12px; top: 135px; bottom: 20px; width: 6px;
+  position: absolute; right: 12px; top: 160px; bottom: 20px; width: 6px;
   background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; z-index: 5; pointer-events: none;
   display: flex; align-items: flex-end;
 }
