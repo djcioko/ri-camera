@@ -67,16 +67,20 @@ async function refreshLibrary() {
   for (const c of clips) {
     const url = URL.createObjectURL(c.blob);
     const el = document.createElement("div");
-    el.className = "clip";
+    el.className = "clip-card";
     const dt = new Date(c.createdAt);
     el.innerHTML = `
       <video src="${url}" controls playsinline webkit-playsinline preload="metadata"></video>
-      <div class="meta">
-        <strong>${c.site}</strong><br>
-        ${dt.toLocaleTimeString("ro-RO")} <small>${(c.size / 1024 / 1024).toFixed(1)} MB</small>
+      <div class="clip-info">
+        <div class="meta">
+          <strong>Șantier: ${c.site}</strong><br>
+          <small>${dt.toLocaleDateString("ro-RO")} ${dt.toLocaleTimeString("ro-RO")} • ${(c.size / 1024 / 1024).toFixed(1)} MB</small>
+        </div>
       </div>
-      <button class="icon-btn" data-act="dl" title="Descarcă clipul">⬇</button>
-      <button class="icon-btn" data-act="del" title="Șterge">🗑</button>
+      <div class="clip-actions">
+        <button class="icon-btn" data-act="dl" title="Descarcă clipul">⬇ Descarcă / Deschide</button>
+        <button class="icon-btn" data-act="del" title="Șterge">🗑 Șterge</button>
+      </div>
     `;
     el.querySelector('[data-act="dl"]').onclick = () => {
       const a = document.createElement("a");
@@ -237,9 +241,9 @@ const siteInput = document.getElementById("siteName");
 siteInput.value = localStorage.getItem("ri_site_name") || "";
 siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
 
-// Drag & Drop compatibil atât cu Mouse cât și cu Touch (Mobil)
+// Mutare elemente pe ecran (Drag & Drop pentru Logo și Site)
 function makeDraggable(elm) {
-  let posX = 0, posY = 0, mouseX = 0, mouseY = 0;
+  let startX = 0, startY = 0, posX = 0, posY = 0;
 
   const savedX = localStorage.getItem(elm.id + "_x");
   const savedY = localStorage.getItem(elm.id + "_y");
@@ -253,21 +257,21 @@ function makeDraggable(elm) {
 
   function dragMouseDown(e) {
     e.preventDefault();
-    mouseX = e.clientX;
-    mouseY = e.clientY;
+    posX = e.clientX;
+    posY = e.clientY;
     document.onpointermove = elementDrag;
     document.onpointerup = closeDragElement;
   }
 
   function elementDrag(e) {
     e.preventDefault();
-    posX = mouseX - e.clientX;
-    posY = mouseY - e.clientY;
-    mouseX = e.clientX;
-    mouseY = e.clientY;
+    startX = posX - e.clientX;
+    startY = posY - e.clientY;
+    posX = e.clientX;
+    posY = e.clientY;
 
-    elm.style.top = (elm.offsetTop - posY) + "px";
-    elm.style.left = (elm.offsetLeft - posX) + "px";
+    elm.style.top = (elm.offsetTop - startY) + "px";
+    elm.style.left = (elm.offsetLeft - startX) + "px";
     elm.style.right = "auto";
   }
 
@@ -280,7 +284,7 @@ function makeDraggable(elm) {
 }
 
 makeDraggable(document.getElementById("draggableLogo"));
-makeDraggable(document.getElementById("draggableTel"));
+makeDraggable(document.getElementById("draggableSite"));
 
 (async () => {
   await startCamera();
