@@ -29,7 +29,6 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .stage { position: relative; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 #liveVideo { width: 100%; height: 100%; object-fit: cover; background: #000; }
 
-/* Watermark-uri fixe pe ecran peste video */
 .watermark-logo { position: absolute; top: 16px; left: 16px; width: 22vw; max-width: 90px; pointer-events: none; z-index: 4; }
 .watermark-logo img { width: 100%; height: auto; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8)); }
 
