@@ -147,14 +147,12 @@ function monitorAudio() {
   requestAnimationFrame(monitorAudio);
 }
 
-// Filtre live direct pe elementul video
 function updateFilters() {
   liveVideo.style.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
 }
 sBright.oninput = updateFilters;
 sContrast.oninput = updateFilters;
 
-// Înregistrare Video Directă din Stream
 function startRecording() {
   if (liveVideo.captureStream) {
     recChunks = [];
