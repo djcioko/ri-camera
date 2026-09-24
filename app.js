@@ -1,3 +1,4 @@
+const liveVideo = document.getElementById("liveVideo");
 const canvas = document.getElementById("renderCanvas");
 const ctx = canvas.getContext("2d");
 const vuFill = document.getElementById("vuFill");
@@ -10,11 +11,6 @@ const techInfoBadge = document.getElementById("techInfoBadge");
 const sBright = document.getElementById("sBright");
 const sContrast = document.getElementById("sContrast");
 
-let videoEl = document.createElement("video");
-videoEl.playsInline = true;
-videoEl.muted = true;
-videoEl.autoplay = true;
-
 let stream = null;
 let facingMode = "environment";
 let audioCtx, analyser, dataArray;
@@ -24,17 +20,26 @@ let recChunks = [];
 let recStarted = 0;
 let recTimer = null;
 
-// Încărcare imagini din folderul assets (Logo + Site www)
+// Încărcare imagini din folderul assets
 const logoImg = new Image();
 logoImg.src = "assets/logo.png";
 
 const siteImg = new Image();
-// Înlocuiește "assets/site.png" cu numele exact al fișierului tău PNG cu site-ul (ex: "assets/www.png" sau "assets/site.png")
-siteImg.src = "assets/site.png"; 
+siteImg.src = "assets/site.png"; // Asigură-te că fișierul PNG cu site-ul din folderul assets are acest nume
 
-// Poziții inițiale pe ecran
-let logoState = { x: 30, y: 30, w: 100, h: 50 };
-let siteState = { x: 30, y: 100, w: 140, h: 40 };
+// Poziții salvate sau implicite pentru elemente
+let logoState = { 
+  x: parseInt(localStorage.getItem("logo_x")) || 30, 
+  y: parseInt(localStorage.getItem("logo_y")) || 30, 
+  w: 100, 
+  h: 50 
+};
+let siteState = { 
+  x: parseInt(localStorage.getItem("site_x")) || 30, 
+  y: parseInt(localStorage.getItem("site_y")) || 100, 
+  w: 140, 
+  h: 40 
+};
 
 let activeDrag = null;
 let dragOffsetX = 0;
@@ -132,8 +137,8 @@ async function startCamera() {
         frameRate: { ideal: 60, min: 30 }
       },
     });
-    videoEl.srcObject = stream;
-    await videoEl.play();
+    liveVideo.srcObject = stream;
+    await liveVideo.play();
 
     const track = stream.getVideoTracks()[0];
     const settings = track.getSettings();
@@ -164,29 +169,29 @@ function monitorAudio() {
   requestAnimationFrame(monitorAudio);
 }
 
-// Bucle de randare continuă pe Canvas
+// Randare cadru pe Canvas cu imagini și filtre
 function renderFrame() {
-  if (videoEl.readyState >= videoEl.HAVE_CURRENT_OF_ENOUGH) {
-    if (canvas.width !== videoEl.videoWidth || canvas.height !== videoEl.videoHeight) {
-      canvas.width = videoEl.videoWidth || 1280;
-      canvas.height = videoEl.videoHeight || 720;
+  if (liveVideo.readyState >= liveVideo.HAVE_CURRENT_DATA) {
+    if (canvas.width !== liveVideo.videoWidth || canvas.height !== liveVideo.videoHeight) {
+      canvas.width = liveVideo.videoWidth || 1280;
+      canvas.height = liveVideo.videoHeight || 720;
     }
 
     ctx.save();
     ctx.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    ctx.drawImage(liveVideo, 0, 0, canvas.width, canvas.height);
     ctx.restore();
 
-    // Desenează logo-ul
+    // Logo R&I
     if (logoImg.complete && logoImg.naturalWidth !== 0) {
       ctx.drawImage(logoImg, logoState.x, logoState.y, logoState.w, logoState.h);
     }
-    // Desenează poza cu site-ul www
+    // Poză Site www
     if (siteImg.complete && siteImg.naturalWidth !== 0) {
       ctx.drawImage(siteImg, siteState.x, siteState.y, siteState.w, siteState.h);
     }
 
-    // Informații text șantier & dată (opțional)
+    // Dată și Nume Șantier
     if (document.getElementById("chkDate").checked) {
       ctx.save();
       ctx.font = "bold 16px Inter, sans-serif";
@@ -203,7 +208,7 @@ function renderFrame() {
 }
 requestAnimationFrame(renderFrame);
 
-// Interacțiune tactilă / mouse pentru a muta elementele direct pe canvas
+// Mutare elemente cu mouse-ul sau degetul pe ecran
 function getCanvasCoords(e) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
@@ -218,14 +223,11 @@ function getCanvasCoords(e) {
 
 canvas.onpointerdown = (e) => {
   const pos = getCanvasCoords(e);
-  // Verifică dacă ai dat click pe logo
   if (pos.x >= logoState.x && pos.x <= logoState.x + logoState.w && pos.y >= logoState.y && pos.y <= logoState.y + logoState.h) {
     activeDrag = "logo";
     dragOffsetX = pos.x - logoState.x;
     dragOffsetY = pos.y - logoState.y;
-  } 
-  // Verifică dacă ai dat click pe site
-  else if (pos.x >= siteState.x && pos.x <= siteState.x + siteState.w && pos.y >= siteState.y && pos.y <= siteState.y + siteState.h) {
+  } else if (pos.x >= siteState.x && pos.x <= siteState.x + siteState.w && pos.y >= siteState.y && pos.y <= siteState.y + siteState.h) {
     activeDrag = "site";
     dragOffsetX = pos.x - siteState.x;
     dragOffsetY = pos.y - siteState.y;
@@ -238,16 +240,20 @@ canvas.onpointermove = (e) => {
   if (activeDrag === "logo") {
     logoState.x = pos.x - dragOffsetX;
     logoState.y = pos.y - dragOffsetY;
+    localStorage.setItem("logo_x", logoState.x);
+    localStorage.setItem("logo_y", logoState.y);
   } else if (activeDrag === "site") {
     siteState.x = pos.x - dragOffsetX;
     siteState.y = pos.y - dragOffsetY;
+    localStorage.setItem("site_x", siteState.x);
+    localStorage.setItem("site_y", siteState.y);
   }
 };
 
 canvas.onpointerup = () => { activeDrag = null; };
 canvas.onpointercancel = () => { activeDrag = null; };
 
-// Înregistrare video direct din Canvas (imprimă absolut tot ce se vede)
+// Înregistrare video din Canvas
 function startRecording() {
   recChunks = [];
   const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
@@ -315,6 +321,10 @@ document.getElementById("btnReset").onclick = () => {
 document.getElementById("btnResetPos").onclick = () => {
   logoState.x = 30; logoState.y = 30;
   siteState.x = 30; siteState.y = 100;
+  localStorage.removeItem("logo_x");
+  localStorage.removeItem("logo_y");
+  localStorage.removeItem("site_x");
+  localStorage.removeItem("site_y");
 };
 
 document.getElementById("btnLibrary").onclick = () => {
