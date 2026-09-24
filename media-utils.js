@@ -16,5 +16,10 @@
     return formats.find((format) => isTypeSupported(format.mimeType)) || formats[formats.length - 1];
   }
 
-  return { selectRecordingFormat };
+  async function finalizeRecordingBlob(blob, convertToMp4) {
+    if (blob.type && blob.type.toLowerCase().includes("mp4")) return blob;
+    return convertToMp4(blob);
+  }
+
+  return { finalizeRecordingBlob, selectRecordingFormat };
 });

@@ -1,9 +1,9 @@
-const CACHE_NAME = "ri-camera-v2";
+const CACHE_NAME = "ri-camera-v3";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((c) =>
-      c.addAll(["./", "./index.html", "./styles.css", "./overlay-utils.js", "./media-utils.js", "./app.js", "./manifest.json", "./assets/logo.png", "./assets/site.png"])
+      c.addAll(["./", "./index.html", "./styles.css?v=3", "./overlay-utils.js?v=3", "./media-utils.js?v=3", "./app.js?v=3", "./manifest.json", "./assets/logo.png", "./assets/site.png"])
     )
   );
 });

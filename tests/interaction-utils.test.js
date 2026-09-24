@@ -24,3 +24,17 @@ test("recording format prefers real MP4 and identifies WebM conversion fallback"
   assert.equal(webm.extension, "webm");
   assert.equal(webm.needsConversion, true);
 });
+
+test("a WebM recording is converted before it becomes downloadable", async () => {
+  const webm = { type: "video/webm" };
+  const mp4 = { type: "video/mp4" };
+  let convertedInput = null;
+
+  const result = await media.finalizeRecordingBlob(webm, async (input) => {
+    convertedInput = input;
+    return mp4;
+  });
+
+  assert.equal(convertedInput, webm);
+  assert.equal(result, mp4);
+});

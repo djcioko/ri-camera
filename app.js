@@ -7,6 +7,7 @@ const recTime = document.getElementById("recTime");
 const clipCount = document.getElementById("clipCount");
 const clipList = document.getElementById("clipList");
 const techInfoBadge = document.getElementById("techInfoBadge");
+const exportStatus = document.getElementById("exportStatus");
 
 const sBright = document.getElementById("sBright");
 const sContrast = document.getElementById("sContrast");
@@ -105,6 +106,23 @@ async function saveClip(blob) {
   refreshLibrary();
 }
 
+async function replaceClipBlob(id, blob) {
+  const db = await openDb();
+  const clip = await new Promise((resolve) => {
+    const tx = db.transaction(STORE, "readonly");
+    const req = tx.objectStore(STORE).get(id);
+    req.onsuccess = () => resolve(req.result);
+  });
+  if (!clip) return;
+  clip.blob = blob;
+  clip.size = blob.size;
+  await new Promise((resolve) => {
+    const tx = db.transaction(STORE, "readwrite");
+    tx.objectStore(STORE).put(clip);
+    tx.oncomplete = resolve;
+  });
+}
+
 async function getClips() {
   const db = await openDb();
   return new Promise((resolve) => {
@@ -124,6 +142,7 @@ async function refreshLibrary() {
   }
   for (const c of clips) {
     const url = URL.createObjectURL(c.blob);
+    const isMp4 = c.blob.type.toLowerCase().includes("mp4");
     const el = document.createElement("div");
     el.className = "clip-card";
     const dt = new Date(c.createdAt);
@@ -136,29 +155,17 @@ async function refreshLibrary() {
         </div>
       </div>
       <div class="clip-actions">
-        <button class="icon-btn" data-act="dl" title="Descarcă clipul">⬇ Descarcă / Deschide</button>
+        <button class="icon-btn" data-act="dl" title="Descarcă clipul">${isMp4 ? "⬇ Descarcă MP4" : "⚙ Pregătește MP4"}</button>
         <button class="icon-btn" data-act="del" title="Șterge">🗑 Șterge</button>
       </div>
     `;
-    el.querySelector('[data-act="dl"]').onclick = async (event) => {
+    el.querySelector('[data-act="dl"]').onclick = (event) => {
       const button = event.currentTarget;
-      button.disabled = true;
-      const originalLabel = button.textContent;
-      try {
-        button.textContent = c.blob.type.includes("mp4") ? "Pregătire MP4…" : "Conversie MP4 0%…";
-        const mp4Blob = c.blob.type.includes("mp4")
-          ? c.blob
-          : await convertToMp4(c.blob, (ratio) => {
-              button.textContent = `Conversie MP4 ${Math.round(ratio * 100)}%…`;
-            });
-        downloadBlob(mp4Blob, `RI_${c.site}_${c.id}.mp4`);
-      } catch (error) {
-        console.error(error);
-        alert("Conversia MP4 nu a reușit. Verifică internetul și spațiul liber, apoi reîncearcă.");
-      } finally {
-        button.disabled = false;
-        button.textContent = originalLabel;
+      if (isMp4) {
+        downloadBlob(c.blob, `RI_${c.site}_${c.id}.mp4`);
+        return;
       }
+      prepareArchivedClipAsMp4(c, button);
     };
     el.querySelector('[data-act="del"]').onclick = async () => {
       const db = await openDb();
@@ -170,6 +177,26 @@ async function refreshLibrary() {
   }
 }
 
+async function prepareArchivedClipAsMp4(clip, button) {
+      button.disabled = true;
+      const originalLabel = button.textContent;
+      try {
+        button.textContent = "Conversie MP4 0%…";
+        const mp4Blob = await convertToMp4(clip.blob, (ratio) => {
+              button.textContent = `Conversie MP4 ${Math.round(ratio * 100)}%…`;
+            });
+        await replaceClipBlob(clip.id, mp4Blob);
+        await refreshLibrary();
+        alert("MP4 este pregătit. Apasă «Descarcă MP4».");
+      } catch (error) {
+        console.error(error);
+        alert("Conversia MP4 nu a reușit. Verifică internetul și spațiul liber, apoi reîncearcă.");
+      } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
+}
+
 function downloadBlob(blob, filename) {
   const href = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -177,6 +204,11 @@ function downloadBlob(blob, filename) {
   anchor.download = filename;
   anchor.click();
   setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+function setExportStatus(message, visible = true) {
+  exportStatus.textContent = message;
+  exportStatus.classList.toggle("hidden", !visible);
 }
 
 let ffmpegPromise = null;
@@ -442,9 +474,21 @@ function startRecording() {
 
   mediaRecorder = new MediaRecorder(canvasStream, { mimeType: format.mimeType, videoBitsPerSecond: 10_000_000 });
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
-  mediaRecorder.onstop = () => {
-    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || format.mimeType });
-    saveClip(blob);
+  mediaRecorder.onstop = async () => {
+    const recordedBlob = new Blob(recChunks, { type: mediaRecorder.mimeType || format.mimeType });
+    try {
+      const mp4Blob = await RIMediaUtils.finalizeRecordingBlob(recordedBlob, (blob) => {
+        setExportStatus("Pregătire MP4 0%…");
+        return convertToMp4(blob, (ratio) => setExportStatus(`Pregătire MP4 ${Math.round(ratio * 100)}%…`));
+      });
+      await saveClip(mp4Blob);
+      setExportStatus("MP4 pregătit pentru descărcare.");
+      setTimeout(() => setExportStatus("", false), 2500);
+    } catch (error) {
+      console.error(error);
+      await saveClip(recordedBlob);
+      setExportStatus("Clip salvat. Conversia MP4 poate fi reluată din Arhivă.");
+    }
   };
   
   mediaRecorder.start(250);
@@ -503,6 +547,19 @@ document.getElementById("btnResetPos").onclick = () => {
     for (const key of ["x", "y", "w", "h"]) localStorage.removeItem(`${name}_${key}`);
   }
 };
+
+function scaleOverlayFromButton(name, factor) {
+  selectedOverlay = name;
+  Object.assign(overlayState(name), RIOverlayUtils.scaleOverlay(
+    overlayState(name), factor, { width: canvas.width, height: canvas.height }
+  ));
+  persistOverlay(name);
+}
+
+document.getElementById("btnLogoMinus").onclick = () => scaleOverlayFromButton("logo", 0.85);
+document.getElementById("btnLogoPlus").onclick = () => scaleOverlayFromButton("logo", 1.15);
+document.getElementById("btnSiteMinus").onclick = () => scaleOverlayFromButton("site", 0.85);
+document.getElementById("btnSitePlus").onclick = () => scaleOverlayFromButton("site", 1.15);
 
 document.getElementById("btnLibrary").onclick = () => {
   document.getElementById("library").classList.remove("hidden");

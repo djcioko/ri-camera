@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>R&I Camera — Șantier</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=3" />
   <link rel="icon" href="assets/logo.png" />
 </head>
 <body>
@@ -43,6 +43,15 @@
         <button id="btnResetPos" class="pill">↩ Reset Poziții</button>
       </div>
       <p class="overlay-help">PNG: trage pentru poziție · două degete sau rotița pentru mărime</p>
+      <div class="overlay-scale-controls" aria-label="Redimensionare PNG">
+        <span>LOGO</span>
+        <button id="btnLogoMinus" class="pill" type="button">− Mic</button>
+        <button id="btnLogoPlus" class="pill" type="button">＋ Mare</button>
+        <span>SITE</span>
+        <button id="btnSiteMinus" class="pill" type="button">− Mic</button>
+        <button id="btnSitePlus" class="pill" type="button">＋ Mare</button>
+      </div>
+      <p id="exportStatus" class="export-status hidden" role="status" aria-live="polite"></p>
       <div class="sliders">
         <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
         <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
@@ -63,8 +72,8 @@
     <div id="clipList" class="clip-list"></div>
   </aside>
 
-  <script src="overlay-utils.js"></script>
-  <script src="media-utils.js"></script>
-  <script src="app.js"></script>
+  <script src="overlay-utils.js?v=3"></script>
+  <script src="media-utils.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>

@@ -67,6 +67,15 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 
 .row-btns { display: flex; gap: 8px; margin-bottom: 8px; justify-content: space-between; }
 .overlay-help { margin: -2px 0 8px; color: var(--gold); font-size: 10px; text-align: center; }
+.overlay-scale-controls {
+  display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 8px;
+}
+.overlay-scale-controls span { color: var(--gold); font-size: 10px; font-weight: 800; min-width: 34px; }
+.overlay-scale-controls .pill { padding: 7px 8px; border-color: rgba(226,193,74,.45); }
+.export-status {
+  margin: 0 0 8px; padding: 7px 9px; border: 1px solid rgba(226,193,74,.45);
+  border-radius: 7px; background: #1a170b; color: var(--gold); font-size: 11px; text-align: center;
+}
 .sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-bottom: 8px; }
 .sliders label { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
 input[type=range] { width: 100%; accent-color: var(--gold); }
