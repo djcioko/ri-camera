@@ -1,8 +1,5 @@
-const liveVideo = document.getElementById("liveVideo");
-const stageCanvas = document.getElementById("stageCanvas");
-const ctx = stageCanvas.getContext("2d");
-const stageArea = document.getElementById("stageArea") || document.querySelector(".stage");
-
+const canvas = document.getElementById("renderCanvas");
+const ctx = canvas.getContext("2d");
 const vuFill = document.getElementById("vuFill");
 const recBadge = document.getElementById("recBadge");
 const recTime = document.getElementById("recTime");
@@ -13,23 +10,35 @@ const techInfoBadge = document.getElementById("techInfoBadge");
 const sBright = document.getElementById("sBright");
 const sContrast = document.getElementById("sContrast");
 
-const draggableLogo = document.getElementById("draggableLogo");
-const draggableSite = document.getElementById("draggableSite");
-const logoImg = draggableLogo.querySelector("img");
-const siteImgEl = draggableSite.querySelector("img");
+let videoEl = document.createElement("video");
+videoEl.playsInline = true;
+videoEl.muted = true;
+videoEl.autoplay = true;
 
 let stream = null;
 let facingMode = "environment";
-
 let audioCtx, analyser, dataArray;
-let destNode = null;
-let micSourceNode = null;
-
 let recording = false;
 let mediaRecorder = null;
 let recChunks = [];
 let recStarted = 0;
 let recTimer = null;
+
+// Încărcare imagini din folderul assets (Logo + Site www)
+const logoImg = new Image();
+logoImg.src = "assets/logo.png";
+
+const siteImg = new Image();
+// Înlocuiește "assets/site.png" cu numele exact al fișierului tău PNG cu site-ul (ex: "assets/www.png" sau "assets/site.png")
+siteImg.src = "assets/site.png"; 
+
+// Poziții inițiale pe ecran
+let logoState = { x: 30, y: 30, w: 100, h: 50 };
+let siteState = { x: 30, y: 100, w: 140, h: 40 };
+
+let activeDrag = null;
+let dragOffsetX = 0;
+let dragOffsetY = 0;
 
 const DB_NAME = "ri-camera-db";
 const STORE = "clips";
@@ -112,9 +121,9 @@ async function refreshLibrary() {
 }
 
 async function startCamera() {
-  const oldStream = stream;
+  if (stream) stream.getTracks().forEach((t) => t.stop());
   try {
-    const newStream = await navigator.mediaDevices.getUserMedia({
+    stream = await navigator.mediaDevices.getUserMedia({
       audio: true,
       video: {
         facingMode,
@@ -123,51 +132,26 @@ async function startCamera() {
         frameRate: { ideal: 60, min: 30 }
       },
     });
+    videoEl.srcObject = stream;
+    await videoEl.play();
 
-    liveVideo.srcObject = newStream;
-    await liveVideo.play();
-    stream = newStream;
-
-    const track = newStream.getVideoTracks()[0];
+    const track = stream.getVideoTracks()[0];
     const settings = track.getSettings();
-    const vw = settings.width || 1920;
-    const vh = settings.height || 1080;
-    if (stageCanvas.width !== vw || stageCanvas.height !== vh) {
-      stageCanvas.width = vw;
-      stageCanvas.height = vh;
-    }
-    techInfoBadge.textContent = `${vw}x${vh} / ${Math.round(settings.frameRate || 60)} FPS`;
+    techInfoBadge.textContent = `${settings.width || 1920}x${settings.height || 1080} / ${settings.frameRate || 60} FPS`;
 
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     } else if (audioCtx.state === "suspended") {
       audioCtx.resume();
     }
-    if (!destNode) {
-      destNode = audioCtx.createMediaStreamDestination();
-    }
-    if (!analyser) {
-      analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 256;
-      dataArray = new Uint8Array(analyser.frequencyBinCount);
-      monitorAudio();
-    }
-
-    if (micSourceNode) {
-      try { micSourceNode.disconnect(); } catch (_) {}
-    }
-    micSourceNode = audioCtx.createMediaStreamSource(newStream);
-    micSourceNode.connect(destNode);
-    micSourceNode.connect(analyser);
-
-    if (oldStream) oldStream.getTracks().forEach((t) => t.stop());
-
-    if (!drawLoopStarted) {
-      drawLoopStarted = true;
-      requestAnimationFrame(drawFrame);
-    }
+    const src = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 256;
+    src.connect(analyser);
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    monitorAudio();
   } catch (err) {
-    alert("Eroare pornire cameră: " + err.message);
+    alert("Erore pornire cameră: " + err.message);
   }
 }
 
@@ -180,73 +164,111 @@ function monitorAudio() {
   requestAnimationFrame(monitorAudio);
 }
 
-let drawLoopStarted = false;
+// Bucle de randare continuă pe Canvas
+function renderFrame() {
+  if (videoEl.readyState >= videoEl.HAVE_CURRENT_OF_ENOUGH) {
+    if (canvas.width !== videoEl.videoWidth || canvas.height !== videoEl.videoHeight) {
+      canvas.width = videoEl.videoWidth || 1280;
+      canvas.height = videoEl.videoHeight || 720;
+    }
 
-function drawFrame() {
-  if (liveVideo.readyState >= 2 && stageCanvas.width && stageCanvas.height) {
     ctx.save();
     ctx.filter = `brightness(${sBright.value}%) contrast(${sContrast.value}%)`;
-    ctx.drawImage(liveVideo, 0, 0, stageCanvas.width, stageCanvas.height);
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     ctx.restore();
 
-    drawOverlayImage(logoImg, draggableLogo);
-    drawOverlayImage(siteImgEl, draggableSite);
-  }
-  requestAnimationFrame(drawFrame);
-}
+    // Desenează logo-ul
+    if (logoImg.complete && logoImg.naturalWidth !== 0) {
+      ctx.drawImage(logoImg, logoState.x, logoState.y, logoState.w, logoState.h);
+    }
+    // Desenează poza cu site-ul www
+    if (siteImg.complete && siteImg.naturalWidth !== 0) {
+      ctx.drawImage(siteImg, siteState.x, siteState.y, siteState.w, siteState.h);
+    }
 
-function getCoverTransform() {
-  const rect = stageArea.getBoundingClientRect();
-  const iw = stageCanvas.width || 1;
-  const ih = stageCanvas.height || 1;
-  const s = Math.max(rect.width / iw, rect.height / ih) || 1;
+    // Informații text șantier & dată (opțional)
+    if (document.getElementById("chkDate").checked) {
+      ctx.save();
+      ctx.font = "bold 16px Inter, sans-serif";
+      ctx.fillStyle = "#e2c14a";
+      ctx.shadowColor = "rgba(0,0,0,0.8)";
+      ctx.shadowBlur = 4;
+      const sName = document.getElementById("siteName").value || "Șantier";
+      const timeStr = new Date().toLocaleString("ro-RO");
+      ctx.fillText(`Șantier: ${sName} | ${timeStr}`, 20, canvas.height - 25);
+      ctx.restore();
+    }
+  }
+  requestAnimationFrame(renderFrame);
+}
+requestAnimationFrame(renderFrame);
+
+// Interacțiune tactilă / mouse pentru a muta elementele direct pe canvas
+function getCanvasCoords(e) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
   return {
-    s,
-    offsetX: (iw * s - rect.width) / 2,
-    offsetY: (ih * s - rect.height) / 2,
+    x: (clientX - rect.left) * scaleX,
+    y: (clientY - rect.top) * scaleY
   };
 }
 
-function drawOverlayImage(imgEl, wrapperEl) {
-  if (!imgEl || !imgEl.complete || !imgEl.naturalWidth) return;
-  const t = getCoverTransform();
-  const cssX = wrapperEl.offsetLeft;
-  const cssY = wrapperEl.offsetTop;
-  const cssW = wrapperEl.offsetWidth;
-  const cssH = wrapperEl.offsetHeight;
-  const cx = (cssX + t.offsetX) / t.s;
-  const cy = (cssY + t.offsetY) / t.s;
-  const cw = cssW / t.s;
-  const ch = cssH / t.s;
-  ctx.drawImage(imgEl, cx, cy, cw, ch);
-}
-
-function startRecording() {
-  if (!stageCanvas.captureStream) {
-    alert("Browserul tău nu suportă înregistrarea din canvas.");
-    return;
+canvas.onpointerdown = (e) => {
+  const pos = getCanvasCoords(e);
+  // Verifică dacă ai dat click pe logo
+  if (pos.x >= logoState.x && pos.x <= logoState.x + logoState.w && pos.y >= logoState.y && pos.y <= logoState.y + logoState.h) {
+    activeDrag = "logo";
+    dragOffsetX = pos.x - logoState.x;
+    dragOffsetY = pos.y - logoState.y;
+  } 
+  // Verifică dacă ai dat click pe site
+  else if (pos.x >= siteState.x && pos.x <= siteState.x + siteState.w && pos.y >= siteState.y && pos.y <= siteState.y + siteState.h) {
+    activeDrag = "site";
+    dragOffsetX = pos.x - siteState.x;
+    dragOffsetY = pos.y - siteState.y;
   }
+};
+
+canvas.onpointermove = (e) => {
+  if (!activeDrag) return;
+  const pos = getCanvasCoords(e);
+  if (activeDrag === "logo") {
+    logoState.x = pos.x - dragOffsetX;
+    logoState.y = pos.y - dragOffsetY;
+  } else if (activeDrag === "site") {
+    siteState.x = pos.x - dragOffsetX;
+    siteState.y = pos.y - dragOffsetY;
+  }
+};
+
+canvas.onpointerup = () => { activeDrag = null; };
+canvas.onpointercancel = () => { activeDrag = null; };
+
+// Înregistrare video direct din Canvas (imprimă absolut tot ce se vede)
+function startRecording() {
   recChunks = [];
   const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+  
+  const canvasStream = canvas.captureStream(60);
+  const audioTracks = stream.getAudioTracks();
+  if (audioTracks.length) canvasStream.addTrack(audioTracks[0]);
 
-  const canvasStream = stageCanvas.captureStream(30);
-  const recordStream = new MediaStream();
-  canvasStream.getVideoTracks().forEach((t) => recordStream.addTrack(t));
-  if (destNode) destNode.stream.getAudioTracks().forEach((t) => recordStream.addTrack(t));
-
-  mediaRecorder = new MediaRecorder(recordStream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  mediaRecorder = new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
     const blob = new Blob(recChunks, { type: mime });
     saveClip(blob);
   };
-
+  
   mediaRecorder.start(250);
   recording = true;
   recStarted = Date.now();
   recBadge.classList.remove("hidden");
   document.getElementById("btnRec").classList.add("on");
-
+  
   recTimer = setInterval(() => {
     const s = Math.floor((Date.now() - recStarted) / 1000);
     const mm = String(Math.floor(s / 60)).padStart(2, "0");
@@ -285,21 +307,14 @@ document.getElementById("btnFullscreen").onclick = () => {
   }
 };
 
-let locked = false;
-document.getElementById("btnLock").onclick = async () => {
-  locked = !locked;
-  const track = stream?.getVideoTracks()[0];
-  if (track) {
-    try {
-      await track.applyConstraints({ advanced: [{ focusMode: locked ? "locked" : "continuous", exposureMode: locked ? "locked" : "continuous" }] });
-    } catch (_) {}
-  }
-  document.getElementById("lockBadge").classList.toggle("hidden", !locked);
-};
-
 document.getElementById("btnReset").onclick = () => {
   sBright.value = 100;
   sContrast.value = 100;
+};
+
+document.getElementById("btnResetPos").onclick = () => {
+  logoState.x = 30; logoState.y = 30;
+  siteState.x = 30; siteState.y = 100;
 };
 
 document.getElementById("btnLibrary").onclick = () => {
@@ -313,82 +328,6 @@ document.getElementById("btnCloseLib").onclick = () => {
 const siteInput = document.getElementById("siteName");
 siteInput.value = localStorage.getItem("ri_site_name") || "";
 siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
-
-function makeDraggable(elm) {
-  let startX = 0, startY = 0, posX = 0, posY = 0;
-
-  const savedX = localStorage.getItem(elm.id + "_x");
-  const savedY = localStorage.getItem(elm.id + "_y");
-  if (savedX !== null && savedY !== null) {
-    elm.style.left = savedX + "px";
-    elm.style.top = savedY + "px";
-    elm.style.right = "auto";
-  }
-  const savedW = localStorage.getItem(elm.id + "_w");
-  if (savedW !== null) {
-    elm.style.width = savedW + "px";
-  }
-
-  elm.onpointerdown = dragMouseDown;
-
-  function dragMouseDown(e) {
-    e.preventDefault();
-    posX = e.clientX;
-    posY = e.clientY;
-    document.onpointermove = elementDrag;
-    document.onpointerup = closeDragElement;
-  }
-
-  function elementDrag(e) {
-    e.preventDefault();
-    startX = posX - e.clientX;
-    startY = posY - e.clientY;
-    posX = e.clientX;
-    posY = e.clientY;
-
-    elm.style.top = (elm.offsetTop - startY) + "px";
-    elm.style.left = (elm.offsetLeft - startX) + "px";
-    elm.style.right = "auto";
-  }
-
-  function closeDragElement() {
-    document.onpointermove = null;
-    document.onpointerup = null;
-    localStorage.setItem(elm.id + "_x", elm.offsetLeft);
-    localStorage.setItem(elm.id + "_y", elm.offsetTop);
-  }
-}
-
-function makeResizable(elm, minWidth, maxWidth) {
-  const handle = elm.querySelector(".resize-handle");
-  if (!handle) return;
-  let startW = 0, startX = 0;
-
-  handle.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    startW = elm.offsetWidth;
-    startX = e.clientX;
-
-    const move = (ev) => {
-      const dx = ev.clientX - startX;
-      const newW = Math.min(maxWidth, Math.max(minWidth, startW + dx));
-      elm.style.width = newW + "px";
-    };
-    const up = () => {
-      document.removeEventListener("pointermove", move);
-      document.removeEventListener("pointerup", up);
-      localStorage.setItem(elm.id + "_w", elm.offsetWidth);
-    };
-    document.addEventListener("pointermove", move);
-    document.addEventListener("pointerup", up);
-  });
-}
-
-makeDraggable(draggableLogo);
-makeDraggable(draggableSite);
-makeResizable(draggableLogo, 40, 320);
-makeResizable(draggableSite, 40, 320);
 
 (async () => {
   await startCamera();
