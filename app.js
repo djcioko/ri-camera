@@ -27,23 +27,54 @@ logoImg.src = "assets/logo.png";
 const siteImg = new Image();
 siteImg.src = "assets/site.png"; // Asigură-te că fișierul PNG cu site-ul din folderul assets are acest nume
 
+function storedNumber(key, fallback) {
+  const value = Number.parseFloat(localStorage.getItem(key));
+  return Number.isFinite(value) ? value : fallback;
+}
+
 // Poziții salvate sau implicite pentru elemente
 let logoState = { 
-  x: parseInt(localStorage.getItem("logo_x")) || 30, 
-  y: parseInt(localStorage.getItem("logo_y")) || 30, 
-  w: 100, 
-  h: 50 
+  x: storedNumber("logo_x", 30),
+  y: storedNumber("logo_y", 30),
+  w: storedNumber("logo_w", 220),
+  h: storedNumber("logo_h", 160),
+  aspect: 877 / 636,
 };
 let siteState = { 
-  x: parseInt(localStorage.getItem("site_x")) || 30, 
-  y: parseInt(localStorage.getItem("site_y")) || 100, 
-  w: 140, 
-  h: 40 
+  x: storedNumber("site_x", 30),
+  y: storedNumber("site_y", 220),
+  w: storedNumber("site_w", 420),
+  h: storedNumber("site_h", 90),
+  aspect: 1024 / 219,
 };
 
 let activeDrag = null;
 let dragOffsetX = 0;
 let dragOffsetY = 0;
+let selectedOverlay = null;
+let pinchStart = null;
+const pointerPositions = new Map();
+
+function overlayState(name) {
+  return name === "logo" ? logoState : siteState;
+}
+
+function persistOverlay(name) {
+  const state = overlayState(name);
+  for (const key of ["x", "y", "w", "h"]) {
+    localStorage.setItem(`${name}_${key}`, String(Math.round(state[key] * 100) / 100));
+  }
+}
+
+function updateAspectFromImage(name, image) {
+  if (!image.naturalWidth || !image.naturalHeight) return;
+  const state = overlayState(name);
+  state.aspect = image.naturalWidth / image.naturalHeight;
+  state.h = state.w / state.aspect;
+}
+
+logoImg.addEventListener("load", () => updateAspectFromImage("logo", logoImg));
+siteImg.addEventListener("load", () => updateAspectFromImage("site", siteImg));
 
 const DB_NAME = "ri-camera-db";
 const STORE = "clips";
@@ -109,11 +140,25 @@ async function refreshLibrary() {
         <button class="icon-btn" data-act="del" title="Șterge">🗑 Șterge</button>
       </div>
     `;
-    el.querySelector('[data-act="dl"]').onclick = () => {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `RI_${c.site}_${c.id}.webm`;
-      a.click();
+    el.querySelector('[data-act="dl"]').onclick = async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      const originalLabel = button.textContent;
+      try {
+        button.textContent = c.blob.type.includes("mp4") ? "Pregătire MP4…" : "Conversie MP4 0%…";
+        const mp4Blob = c.blob.type.includes("mp4")
+          ? c.blob
+          : await convertToMp4(c.blob, (ratio) => {
+              button.textContent = `Conversie MP4 ${Math.round(ratio * 100)}%…`;
+            });
+        downloadBlob(mp4Blob, `RI_${c.site}_${c.id}.mp4`);
+      } catch (error) {
+        console.error(error);
+        alert("Conversia MP4 nu a reușit. Verifică internetul și spațiul liber, apoi reîncearcă.");
+      } finally {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      }
     };
     el.querySelector('[data-act="del"]').onclick = async () => {
       const db = await openDb();
@@ -122,6 +167,73 @@ async function refreshLibrary() {
       tx.oncomplete = refreshLibrary;
     };
     clipList.appendChild(el);
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const href = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = href;
+  anchor.download = filename;
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(href), 1000);
+}
+
+let ffmpegPromise = null;
+
+function loadExternalScript(src) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (window.FFmpeg) resolve();
+      else existing.addEventListener("load", resolve, { once: true });
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error("Biblioteca de conversie MP4 nu poate fi încărcată."));
+    document.head.appendChild(script);
+  });
+}
+
+async function getFfmpeg() {
+  if (!ffmpegPromise) {
+    ffmpegPromise = (async () => {
+      await loadExternalScript("https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js");
+      const ffmpeg = window.FFmpeg.createFFmpeg({
+        log: false,
+        corePath: "https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js",
+      });
+      await ffmpeg.load();
+      return ffmpeg;
+    })();
+  }
+  return ffmpegPromise;
+}
+
+async function convertToMp4(blob, onProgress) {
+  const ffmpeg = await getFfmpeg();
+  const token = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const input = `input-${token}.webm`;
+  const output = `output-${token}.mp4`;
+  ffmpeg.setProgress(({ ratio }) => onProgress(Math.max(0, Math.min(1, ratio || 0))));
+  ffmpeg.FS("writeFile", input, await window.FFmpeg.fetchFile(blob));
+  try {
+    await ffmpeg.run(
+      "-i", input,
+      "-c:v", "libx264",
+      "-preset", "ultrafast",
+      "-movflags", "+faststart",
+      "-c:a", "aac",
+      "-b:a", "128k",
+      output
+    );
+    const data = ffmpeg.FS("readFile", output);
+    return new Blob([data.buffer], { type: "video/mp4" });
+  } finally {
+    try { ffmpeg.FS("unlink", input); } catch (_) {}
+    try { ffmpeg.FS("unlink", output); } catch (_) {}
   }
 }
 
@@ -175,6 +287,8 @@ function renderFrame() {
     if (canvas.width !== liveVideo.videoWidth || canvas.height !== liveVideo.videoHeight) {
       canvas.width = liveVideo.videoWidth || 1280;
       canvas.height = liveVideo.videoHeight || 720;
+      Object.assign(logoState, RIOverlayUtils.clampOverlay(logoState, { width: canvas.width, height: canvas.height }));
+      Object.assign(siteState, RIOverlayUtils.clampOverlay(siteState, { width: canvas.width, height: canvas.height }));
     }
 
     ctx.save();
@@ -189,6 +303,16 @@ function renderFrame() {
     // Poză Site www
     if (siteImg.complete && siteImg.naturalWidth !== 0) {
       ctx.drawImage(siteImg, siteState.x, siteState.y, siteState.w, siteState.h);
+    }
+
+    if (!recording && selectedOverlay) {
+      const state = overlayState(selectedOverlay);
+      ctx.save();
+      ctx.strokeStyle = "#e2c14a";
+      ctx.lineWidth = Math.max(2, canvas.width / 640);
+      ctx.setLineDash([10, 7]);
+      ctx.strokeRect(state.x, state.y, state.w, state.h);
+      ctx.restore();
     }
 
     // Dată și Nume Șantier
@@ -208,7 +332,7 @@ function renderFrame() {
 }
 requestAnimationFrame(renderFrame);
 
-// Mutare elemente cu mouse-ul sau degetul pe ecran
+// Mutare și redimensionare proporțională cu mouse-ul sau degetele
 function getCanvasCoords(e) {
   const rect = canvas.getBoundingClientRect();
   const scaleX = canvas.width / rect.width;
@@ -221,51 +345,105 @@ function getCanvasCoords(e) {
   };
 }
 
-canvas.onpointerdown = (e) => {
-  const pos = getCanvasCoords(e);
-  if (pos.x >= logoState.x && pos.x <= logoState.x + logoState.w && pos.y >= logoState.y && pos.y <= logoState.y + logoState.h) {
-    activeDrag = "logo";
-    dragOffsetX = pos.x - logoState.x;
-    dragOffsetY = pos.y - logoState.y;
-  } else if (pos.x >= siteState.x && pos.x <= siteState.x + siteState.w && pos.y >= siteState.y && pos.y <= siteState.y + siteState.h) {
-    activeDrag = "site";
-    dragOffsetX = pos.x - siteState.x;
-    dragOffsetY = pos.y - siteState.y;
+function hitOverlay(pos) {
+  for (const name of ["site", "logo"]) {
+    const state = overlayState(name);
+    if (pos.x >= state.x && pos.x <= state.x + state.w && pos.y >= state.y && pos.y <= state.y + state.h) return name;
+  }
+  return null;
+}
+
+function pointerDistance() {
+  const points = [...pointerPositions.values()];
+  if (points.length < 2) return 0;
+  return Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+}
+
+canvas.onpointerdown = (event) => {
+  event.preventDefault();
+  const pos = getCanvasCoords(event);
+  pointerPositions.set(event.pointerId, pos);
+  try { canvas.setPointerCapture(event.pointerId); } catch (_) {}
+
+  if (!activeDrag) {
+    activeDrag = hitOverlay(pos);
+    selectedOverlay = activeDrag;
+    if (!activeDrag) return;
+    const state = overlayState(activeDrag);
+    dragOffsetX = pos.x - state.x;
+    dragOffsetY = pos.y - state.y;
+  }
+
+  if (pointerPositions.size === 2 && activeDrag) {
+    pinchStart = { distance: pointerDistance(), state: { ...overlayState(activeDrag) } };
   }
 };
 
-canvas.onpointermove = (e) => {
-  if (!activeDrag) return;
-  const pos = getCanvasCoords(e);
-  if (activeDrag === "logo") {
-    logoState.x = pos.x - dragOffsetX;
-    logoState.y = pos.y - dragOffsetY;
-    localStorage.setItem("logo_x", logoState.x);
-    localStorage.setItem("logo_y", logoState.y);
-  } else if (activeDrag === "site") {
-    siteState.x = pos.x - dragOffsetX;
-    siteState.y = pos.y - dragOffsetY;
-    localStorage.setItem("site_x", siteState.x);
-    localStorage.setItem("site_y", siteState.y);
+canvas.onpointermove = (event) => {
+  if (!pointerPositions.has(event.pointerId) || !activeDrag) return;
+  event.preventDefault();
+  const pos = getCanvasCoords(event);
+  pointerPositions.set(event.pointerId, pos);
+  const bounds = { width: canvas.width, height: canvas.height };
+
+  if (pointerPositions.size >= 2 && pinchStart && pinchStart.distance > 0) {
+    const scaled = RIOverlayUtils.scaleOverlay(pinchStart.state, pointerDistance() / pinchStart.distance, bounds);
+    Object.assign(overlayState(activeDrag), scaled);
+    return;
   }
+
+  const state = overlayState(activeDrag);
+  Object.assign(state, RIOverlayUtils.clampOverlay({
+    ...state,
+    x: pos.x - dragOffsetX,
+    y: pos.y - dragOffsetY,
+  }, bounds));
 };
 
-canvas.onpointerup = () => { activeDrag = null; };
-canvas.onpointercancel = () => { activeDrag = null; };
+function finishPointer(event) {
+  pointerPositions.delete(event.pointerId);
+  if (pointerPositions.size === 0) {
+    if (activeDrag) persistOverlay(activeDrag);
+    activeDrag = null;
+    pinchStart = null;
+  } else if (pointerPositions.size === 1 && activeDrag) {
+    pinchStart = null;
+    const pos = [...pointerPositions.values()][0];
+    const state = overlayState(activeDrag);
+    dragOffsetX = pos.x - state.x;
+    dragOffsetY = pos.y - state.y;
+  }
+}
+
+canvas.onpointerup = finishPointer;
+canvas.onpointercancel = finishPointer;
+
+canvas.addEventListener("wheel", (event) => {
+  const pos = getCanvasCoords(event);
+  const name = hitOverlay(pos);
+  if (!name) return;
+  event.preventDefault();
+  selectedOverlay = name;
+  const factor = event.deltaY < 0 ? 1.08 : 0.92;
+  Object.assign(overlayState(name), RIOverlayUtils.scaleOverlay(
+    overlayState(name), factor, { width: canvas.width, height: canvas.height }
+  ));
+  persistOverlay(name);
+}, { passive: false });
 
 // Înregistrare video din Canvas
 function startRecording() {
   recChunks = [];
-  const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus") ? "video/webm;codecs=vp9,opus" : "video/webm";
+  const format = RIMediaUtils.selectRecordingFormat((type) => MediaRecorder.isTypeSupported(type));
   
   const canvasStream = canvas.captureStream(60);
   const audioTracks = stream.getAudioTracks();
   if (audioTracks.length) canvasStream.addTrack(audioTracks[0]);
 
-  mediaRecorder = new MediaRecorder(canvasStream, { mimeType: mime, videoBitsPerSecond: 10_000_000 });
+  mediaRecorder = new MediaRecorder(canvasStream, { mimeType: format.mimeType, videoBitsPerSecond: 10_000_000 });
   mediaRecorder.ondataavailable = (e) => { if (e.data.size) recChunks.push(e.data); };
   mediaRecorder.onstop = () => {
-    const blob = new Blob(recChunks, { type: mime });
+    const blob = new Blob(recChunks, { type: mediaRecorder.mimeType || format.mimeType });
     saveClip(blob);
   };
   
@@ -319,12 +497,11 @@ document.getElementById("btnReset").onclick = () => {
 };
 
 document.getElementById("btnResetPos").onclick = () => {
-  logoState.x = 30; logoState.y = 30;
-  siteState.x = 30; siteState.y = 100;
-  localStorage.removeItem("logo_x");
-  localStorage.removeItem("logo_y");
-  localStorage.removeItem("site_x");
-  localStorage.removeItem("site_y");
+  Object.assign(logoState, { x: 30, y: 30, w: 220, h: 220 / logoState.aspect });
+  Object.assign(siteState, { x: 30, y: 220, w: 420, h: 420 / siteState.aspect });
+  for (const name of ["logo", "site"]) {
+    for (const key of ["x", "y", "w", "h"]) localStorage.removeItem(`${name}_${key}`);
+  }
 };
 
 document.getElementById("btnLibrary").onclick = () => {
