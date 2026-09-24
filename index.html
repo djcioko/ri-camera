@@ -22,47 +22,31 @@
     </header>
 
     <main class="stage" id="stageArea">
-      <!-- Video real al camerei: rămâne în pagină (nu display:none, ca să nu îngheţe frame-uri pe unele telefoane) dar invizibil, doar sursă pentru canvas -->
-      <video id="liveVideo" playsinline muted autoplay></video>
-
-      <!-- Canvas-ul este ce vede utilizatorul ȘI ce se înregistrează: conţine video + logo + poză site, exact ca pe ecran -->
-      <canvas id="stageCanvas"></canvas>
-
-      <!-- Logo și Poză Site: drag = mutare, colţul din dreapta-jos = redimensionare (free transform) -->
-      <div id="draggableLogo" class="draggable-item" title="Trage de logo să-l muți">
-        <img src="assets/logo.png" alt="Logo R&I" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'90\' height=\'40\'><text x=\'0\' y=\'30\' fill=\'%23e2c14a\' font-size=\'20\' font-weight=\'bold\'>R&I</text></svg>';" />
-        <div class="resize-handle" title="Trage să redimensionezi"></div>
-      </div>
-      <div id="draggableSite" class="draggable-item" title="Trage de poza site să o muți">
-        <img src="assets/telefon.png" alt="Telefon" onerror="this.onerror=null; this.src='data:image/svg+xml;utf8,<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'130\' height=\'30\'><text x=\'0\' y=\'20\' fill=\'%23e2c14a\' font-size=\'14\' font-weight=\'bold\'>0727.300.302</text></svg>';" />
-        <div class="resize-handle" title="Trage să redimensionezi"></div>
-      </div>
+      <!-- Motor grafic unificat pe Canvas -->
+      <canvas id="renderCanvas"></canvas>
 
       <!-- Buton Flip -->
       <button id="btnFlipBig" class="big-flip-btn" title="Schimbă Camera">🔄</button>
 
       <div class="hud-top-left"><span id="techInfoBadge" class="tech-badge">1080p / 60 FPS</span></div>
       <div id="recBadge" class="rec-badge hidden">● REC <span id="recTime">00:00</span></div>
-
+      
       <div class="vu-wrap"><div class="vu-bar"><div id="vuFill"></div></div></div>
-      <div id="lockBadge" class="lock-badge hidden">FOCUS FIX</div>
-
-      <!-- Butonul REC e acum plutitor peste imagine (nu în panoul de control) => rămâne vizibil chiar și când ascunzi controalele -->
-      <button id="btnRec" class="rec-btn-float" aria-label="Înregistrează"></button>
     </main>
 
     <section id="controlPanel" class="controls">
       <div class="row-btns">
         <button id="btnGrid" class="pill">▦ Grid</button>
-        <button id="btnLock" class="pill">🔒 Focus Auto/Fix</button>
         <button id="btnFullscreen" class="pill">⛶ Fullscreen</button>
+        <button id="btnResetPos" class="pill">↩ Reset Poziții</button>
       </div>
       <div class="sliders">
         <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
         <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
       </div>
       <div class="actions">
-        <button id="btnReset" class="pill">Reset</button>
+        <button id="btnReset" class="pill">Reset Culori</button>
+        <button id="btnRec" class="rec-btn" aria-label="Înregistrează"></button>
         <label class="pill chk"><input id="chkDate" type="checkbox" checked /> Dată &amp; Șantier</label>
       </div>
     </section>
