@@ -13,7 +13,7 @@ const server=http.createServer((req,res)=>{const relative=new URL(req.url,'http:
  const id='c'.repeat(32),output=fs.readFileSync(process.env.RI_QA_MP4),calls=[];let requestId;
  const snapshot=status=>({id,requestId,status,progress:status==='ready'?1:0,message:status,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+100000).toISOString(),inputBytes:3,outputBytes:status==='ready'?output.length:0,duration:status==='ready'?2:null,width:status==='ready'?640:null,height:status==='ready'?480:null,cues:status==='ready'?[{start:0,end:1,text:'Bună ziua.'}]:[],error:null});
  await page.route('https://ai.djshopitalia.it/api/ri-subtitles/v1/**',async route=>{
- const request=route.request();const url=new URL(request.url());calls.push(request.method()+' '+url.pathname);assert.equal(request.headers().authorization,'Bearer test-private-code');
+ const request=route.request();const url=new URL(request.url());calls.push(request.method()+' '+url.pathname);assert.equal(request.headers().authorization,undefined);
  if(request.method()==='POST'){const data=request.postDataJSON();requestId=data.requestId;assert.deepEqual(Object.keys(data).sort(),['bytes','filename','language','requestId']);assert.equal(data.filename,'original-real.mov');
  const saved=await page.evaluate(()=>new Promise(resolve=>{const req=indexedDB.open('ri-camera-db',1);req.onsuccess=()=>{const db=req.result;const r=db.transaction('clips').objectStore('clips').getAll();r.onsuccess=()=>{db.close();resolve(r.result.map(c=>({name:c.originalName,size:c.blob.size,remote:c.remoteJob})));};};}));assert.equal(saved[0].name,'original-real.mov');assert.equal(saved[0].remote.requestId,requestId);await route.fulfill({json:snapshot('awaiting_upload')});}
  else if(request.method()==='PUT'){assert.equal(request.postDataBuffer().toString(),'mov');await route.fulfill({json:snapshot('queued')});}
@@ -26,7 +26,7 @@ const server=http.createServer((req,res)=>{const relative=new URL(req.url,'http:
  await page.evaluate(()=>{window.localEngineCalls=0;for(const name of ['extractAudio','exportMp4'])RIMediaProcessor[name]=()=>{window.localEngineCalls++;throw Error('local engine forbidden');};RISpeechRecognizer.transcribe=()=>{window.localEngineCalls++;throw Error('local ASR forbidden');};});
  assert.equal(await page.evaluate(()=>window.cameraRequests),0);
  await page.locator('#subtitleFile').setInputFiles({name:'original-real.mov',mimeType:'video/quicktime',buffer:Buffer.from('mov')});
- assert.equal(calls.length,0);await page.locator('#subtitleAccessCode').fill('test-private-code');await page.locator('#btnServerSubtitle').click();
+ assert.equal(calls.length,0);assert.equal(await page.locator('input[type="password"]').count(),0);await page.locator('#btnServerSubtitle').click();
  await page.waitForFunction(()=>document.getElementById('subtitleModuleStatus').textContent.includes('SRT salvate'));
  const saved=await page.evaluate(()=>getClips().then(clips=>clips.map(c=>({name:c.originalName,source:c.blob.size,output:c.captionedBlob?.size,status:c.subtitleStatus,remote:c.remoteJob,srt:c.srtBlob?.size}))));
  assert.equal(saved[0].status,'ready');assert.equal(saved[0].source,3);assert.equal(saved[0].output,output.length);assert.ok(saved[0].srt>0);assert.equal(saved[0].remote.status,'cancelled');assert.equal(await page.evaluate(()=>window.localEngineCalls),0);assert.equal(await page.evaluate(()=>window.cameraRequests),0);assert.deepEqual(errors,[]);

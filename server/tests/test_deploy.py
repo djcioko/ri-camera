@@ -148,7 +148,7 @@ class DeploymentHostTests(unittest.TestCase):
                 self.assertEqual(list(Path(directory).iterdir()), [marker])
 
     def test_https_verification_checks_local_vhost_then_public_endpoint(self):
-        calls, respond = self.curl_responses([(200, "application/json", b'{"ready": true}', 0)])
+        calls, respond = self.curl_responses([(200, "application/json", b'{"ready": true, "access": "public"}', 0)])
         with patch.object(installer.subprocess, "run", side_effect=respond):
             installer.verify_https("ai.djshopitalia.it")
         self.assertEqual(len(calls), 2)
@@ -162,6 +162,35 @@ class DeploymentHostTests(unittest.TestCase):
             self.assertNotIn("--location", call)
             self.assertNotIn("--fail", call)
             self.assertIn("--max-filesize", call)
+
+    def test_public_environment_removes_legacy_code_and_preserves_operator_limits(self):
+        self.assertTrue(callable(getattr(installer, "service_environment", None)), "Public deployment must build an environment without a shared code")
+        previous = ("RI_SUBTITLES_ACCESS_CODE=legacy-private-sentinel\n"
+                    "RI_SUBTITLES_FONT_PATH=/old/font.ttf\n"
+                    "RI_SUBTITLES_MAX_DURATION=900\n"
+                    "RI_SUBTITLES_MAX_PENDING_JOBS=2\n")
+        release = Path("/opt/ri-subtitles/releases/reviewed")
+        text = installer.service_environment(release, previous)
+        values = dict(line.split("=", 1) for line in text.splitlines() if line)
+        self.assertNotIn("RI_SUBTITLES_ACCESS_CODE", values)
+        self.assertNotIn("legacy-private-sentinel", text)
+        self.assertEqual(values["RI_SUBTITLES_FONT_PATH"], str(release / "assets/subtitles-font.ttf"))
+        self.assertEqual(values["RI_SUBTITLES_ALLOWED_ORIGINS"], "https://djcioko.github.io")
+        self.assertEqual(values["RI_SUBTITLES_MAX_DURATION"], "900")
+        self.assertEqual(values["RI_SUBTITLES_MAX_PENDING_JOBS"], "2")
+        self.assertIn("RI_SUBTITLES_MODEL_DIR", values)
+        self.assertIn("RI_SUBTITLES_DATA_DIR", values)
+
+    def test_public_environment_new_install_does_not_generate_a_code(self):
+        self.assertTrue(callable(getattr(installer, "service_environment", None)))
+        with patch.object(installer.secrets, "token_urlsafe", side_effect=AssertionError("A public install must not create a shared code")):
+            text = installer.service_environment(Path("/opt/ri-subtitles/releases/reviewed"))
+        self.assertNotIn("ACCESS_CODE", text)
+
+    def test_ready_probe_rejects_backend_that_has_not_enabled_public_access(self):
+        for value in ({"ready": True}, {"ready": True, "access": "private"}):
+            with self.subTest(value=value), self.assertRaises(preflight.PreflightError):
+                installer.decode_probe(json.dumps(value).encode(), 200, "application/json", "HTTPS public", require_ready=True)
 
     def test_probe_file_cap_is_enforced_in_child_without_changing_parent(self):
         self.assertTrue(hasattr(installer, "limit_probe_files"))
@@ -178,7 +207,7 @@ class DeploymentHostTests(unittest.TestCase):
         calls, respond = self.curl_responses([
             (200, "text/html", b"<html>old application</html>", 0),
             (301, "text/html", b"redirect", 0),
-            (200, "application/json; charset=utf-8", b'{"ready": true}', 0),
+            (200, "application/json; charset=utf-8", b'{"ready": true, "access": "public"}', 0),
         ])
         with patch.object(installer.subprocess, "run", side_effect=respond), patch.object(installer.time, "sleep"), patch.object(installer.time, "monotonic", side_effect=itertools.count().__next__):
             installer.verify_https("ai.djshopitalia.it")
@@ -206,17 +235,16 @@ class DeploymentHostTests(unittest.TestCase):
         self.assertIn("curl=60", str(caught.exception))
         self.assertNotIn("PRIVATE_RESPONSE_DETAILS", str(caught.exception))
 
-    def test_invalid_uds_auth_json_reports_safe_phase_status_type_and_size(self):
-        response = SimpleNamespace(status=401, getheader=lambda name, default=None: "application/json", read=lambda count: b"PRIVATE_BODY")
+    def test_invalid_uds_public_json_reports_safe_phase_status_type_and_size(self):
+        response = SimpleNamespace(status=404, getheader=lambda name, default=None: "application/json", read=lambda count: b"PRIVATE_BODY")
         with patch.object(installer.http.client, "HTTPConnection") as connection, patch.object(installer.socket, "socket"):
             connection.return_value.getresponse.return_value = response
             with self.assertRaises(preflight.PreflightError) as caught:
-                installer.uds_request("GET", "/v1/jobs/" + "0" * 32, "PRIVATE_ACCESS_CODE", phase="UDS auth", expected_status=401)
+                installer.uds_request("GET", "/v1/jobs/" + "0" * 32, phase="UDS public", expected_status=404)
         message = str(caught.exception)
-        for expected in ("UDS auth", "HTTP=401", "type=application/json", "bytes=12"):
+        for expected in ("UDS public", "HTTP=404", "type=application/json", "bytes=12"):
             self.assertIn(expected, message)
         self.assertNotIn("PRIVATE_BODY", message)
-        self.assertNotIn("PRIVATE_ACCESS_CODE", message)
 
     def test_uds_health_timeout_keeps_last_safe_failure_context(self):
         error = preflight.PreflightError("UDS health: HTTP=200 type=text/html bytes=7")

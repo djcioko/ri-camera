@@ -15,25 +15,25 @@ except ImportError:
 
 class ApiTests(unittest.TestCase):
     def setUp(self):
-        self.assertIsNotNone(create_app, "The authenticated API factory is required")
+        self.assertIsNotNone(create_app, "The public API factory is required")
         from fastapi.testclient import TestClient
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.config = Config(access_code="s" * 40, data_dir=Path(self.temp.name)/"jobs",
+        self.config = Config(data_dir=Path(self.temp.name)/"jobs",
                              model_dir=Path(self.temp.name)/"model", font_path=Path(self.temp.name)/"font.ttf",
                              allowed_origins=("https://djcioko.github.io",), max_input_bytes=8,
                              max_spool_bytes=1000, min_free_bytes=0, max_pending_jobs=3)
         self.app = create_app(self.config)
         self.app.state.ready = True
         self.client = TestClient(self.app)
-        self.headers = {"Authorization": "Bearer " + self.config.access_code}
+        self.headers = {}
 
     def create(self, request_id="request_0123456789", **changes):
         body = dict(requestId=request_id, filename="original.mov", bytes=4, language="ro")
         body.update(changes)
         return self.client.post("/v1/jobs", json=body, headers=self.headers)
 
-    def test_authentication_happens_before_body_read(self):
+    def test_public_request_reaches_json_validation_without_access_code(self):
         read = []
         scope = {"type": "http", "asgi": {"version": "3.0"}, "method": "POST",
                  "scheme": "http", "path": "/v1/jobs", "raw_path": b"/v1/jobs",
@@ -46,8 +46,18 @@ class ApiTests(unittest.TestCase):
         async def send(message):
             messages.append(message)
         asyncio.run(self.app(scope, receive, send))
-        self.assertFalse(read)
-        self.assertEqual(messages[0]["status"], 401)
+        self.assertTrue(read)
+        self.assertEqual(messages[0]["status"], 400)
+        self.assertEqual(json.loads(messages[1]["body"])["error"]["code"], "invalid_request")
+
+    def test_legacy_authorization_header_is_ignored(self):
+        response = self.client.post("/v1/jobs", json=dict(requestId="request_0123456789",
+            filename="original.mov", bytes=4, language="ro"),
+            headers={"Authorization": "Bearer unused-legacy-code"})
+        self.assertEqual(response.status_code, 200, response.text)
+        response = self.client.get(f'/v1/jobs/{response.json()["id"]}')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["status"], "awaiting_upload")
 
     def test_create_is_durably_idempotent(self):
         response = self.create()
@@ -83,12 +93,11 @@ class ApiTests(unittest.TestCase):
         self.create("request_2123456789")
         self.assertEqual(self.create("request_3123456789").status_code, 429)
 
-    def test_outputs_are_authenticated_and_unavailable_until_complete(self):
+    def test_outputs_are_public_and_unavailable_until_complete(self):
         job = self.create().json()
         for suffix in ("output", "subtitles"):
             url = f'/v1/jobs/{job["id"]}/{suffix}'
-            self.assertEqual(self.client.get(url).status_code, 401)
-            self.assertEqual(self.client.get(url, headers=self.headers).status_code, 409)
+            self.assertEqual(self.client.get(url).status_code, 409)
         response = self.client.get("/v1/jobs/../output", headers=self.headers)
         self.assertNotEqual(response.status_code, 200)
 
@@ -96,7 +105,24 @@ class ApiTests(unittest.TestCase):
         self.app.state.ready = False
         body = self.client.get("/v1/health").json()
         self.assertFalse(body["ready"])
+        self.assertEqual(body.get("access"), "public")
         self.assertEqual(body["limits"]["maxInputBytes"], 8)
+
+    def test_public_request_body_is_still_bounded(self):
+        response = self.client.post("/v1/jobs", content=iter([b"x" * 8192, b"y" * 8193]))
+        self.assertEqual(response.status_code, 413, response.text)
+        self.assertEqual(response.json()["error"]["code"], "request_too_large")
+        self.assertEqual(self.app.state.storage.rows(), [])
+
+    def test_public_jobs_have_opaque_ids_and_no_listing_route(self):
+        response = self.create()
+        self.assertEqual(response.status_code, 200, response.text)
+        job = response.json()
+        self.assertRegex(job["id"], r"^[a-f0-9]{32}$")
+        other = self.create("request_1123456789").json()
+        self.assertNotEqual(other["id"], job["id"])
+        self.assertEqual(self.client.get("/v1/jobs").status_code, 405)
+        self.assertEqual(self.client.get("/v1/jobs/" + "0" * 32).status_code, 404)
 
     def test_unready_service_does_not_accept_uploads(self):
         job = self.create().json()
@@ -114,7 +140,7 @@ class ApiTests(unittest.TestCase):
         messages = []
         scope = {"type": "http", "asgi": {"version": "3.0"}, "method": "PUT", "scheme": "http",
                  "path": f'/v1/jobs/{row["id"]}/source', "query_string": b"",
-                 "headers": [(b"authorization", ("Bearer " + config.access_code).encode())],
+                 "headers": [],
                  "server": ("localhost", 80), "client": ("localhost", 1)}
         async def receive():
             await asyncio.sleep(.1)
@@ -129,6 +155,7 @@ class ApiTests(unittest.TestCase):
         headers = {"Origin": "https://djcioko.github.io", "Access-Control-Request-Method": "PUT",
                    "Access-Control-Request-Headers": "authorization,content-type"}
         response = self.client.options("/v1/jobs/unknown/source", headers=headers)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("access-control-allow-origin"), headers["Origin"])
         self.assertNotIn("access-control-allow-credentials", response.headers)
         headers["Origin"] = "https://djcioko.github.io.evil.example"
@@ -144,8 +171,13 @@ class ApiTests(unittest.TestCase):
         (directory/"result.json").write_text(json.dumps(result))
         self.app.state.storage.update(job["id"], status="empty")
         response = self.client.get(f'/v1/jobs/{job["id"]}/output', headers=self.headers)
+        self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.content, b"video")
         self.assertEqual(response.headers["content-type"], "video/mp4")
+        response = self.client.get(f'/v1/jobs/{job["id"]}/subtitles')
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.content, b"")
+        self.assertEqual(response.headers["content-type"], "application/x-subrip")
         for _ in range(2):
             response = self.client.delete(f'/v1/jobs/{job["id"]}', headers=self.headers)
             self.assertEqual(response.json()["status"], "cancelled")
@@ -198,7 +230,7 @@ class ApiTests(unittest.TestCase):
             messages.append(message)
         scope = {"type": "http", "asgi": {"version": "3.0"}, "method": "PUT", "scheme": "http",
                  "path": f'/v1/jobs/{row["id"]}/source', "query_string": b"",
-                 "headers": [(b"authorization", ("Bearer " + self.config.access_code).encode()), (b"content-length", b"8")],
+                 "headers": [(b"content-length", b"8")],
                  "server": ("localhost", 80), "client": ("localhost", 1)}
         with patch.object(Path, "open", new=tracked_open):
             upload_task = asyncio.create_task(self.app(scope, receive, send))

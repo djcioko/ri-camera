@@ -32,15 +32,12 @@
   }
   function createClient(options = {}) {
     const fetchImpl = options.fetch || globalThis.fetch.bind(globalThis);
-    const getAccessCode = options.getAccessCode || (() => '');
     async function request(path, settings = {}) {
-      const code = getAccessCode();
-      if (!code || /[\r\n]/.test(code)) throw new Error('Introdu codul privat de acces pentru ai.djshopitalia.it.');
-      const response = await fetchImpl(BASE_URL + path, { ...settings, credentials: 'omit', redirect: 'error', cache: 'no-store', headers: { ...settings.headers, Authorization: 'Bearer ' + code } });
+      const response = await fetchImpl(BASE_URL + path, { ...settings, credentials: 'omit', redirect: 'error', cache: 'no-store' });
       if (!response.ok) {
         let serverCode = '';
         try { const value = await response.json(); if (value.error && typeof value.error.code === 'string') serverCode = value.error.code; } catch (_) {}
-        const error = new Error(response.status === 401 ? 'Codul de acces nu este acceptat de server.' : 'Serverul nu a acceptat cererea (' + response.status + '). Reîncearcă din Arhivă.');
+        const error = new Error('Serverul nu a acceptat cererea (' + response.status + '). Reîncearcă din Arhivă.');
         error.status = response.status; error.code = serverCode; throw error;
       }
       return response;

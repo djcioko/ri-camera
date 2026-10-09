@@ -202,12 +202,31 @@ test('direct subtitle route and opening module during acquisition never activate
   assert.equal(stopped.length,1);assert.equal(vm.runInContext('stream',f.context),null);
 });
 
-test('camera freezes explicit server processor at recording start',async()=>{
+test('camera freezes explicit server processor and submits publicly after saving the recording',async()=>{
  const f=fixture();f.element('subtitleProcessor').value='server';
- f.context.RIServerSubtitlePipeline={processClip:async(clip)=>{f.context.processed=clip;return clip;}};
+ const calls=[];
+ f.context.RIServerSubtitleClient={createClient:options=>require('../server-subtitle-client.js').createClient({...options,fetch:async(url,settings)=>{
+   calls.push({url,settings});const data=JSON.parse(settings.body);
+   return new Response(JSON.stringify({id:'a'.repeat(32),requestId:data.requestId,status:'awaiting_upload',progress:0,message:'OK',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+10000).toISOString(),inputBytes:data.bytes,outputBytes:0,duration:null,width:null,height:null,cues:[],error:null}),{headers:{'Content-Type':'application/json'}});
+ }})};
+ f.context.RIServerSubtitlePipeline={processClip:async(clip,deps)=>{
+   assert.equal(f.records.get(clip.id).blob,clip.blob);
+   await deps.client.createJob({requestId:'request_0123456789abcdef',filename:'film.webm',bytes:clip.blob.size,language:'ro'});
+   f.context.processed=clip;return clip;
+ }};
  vm.runInContext('startRecording()',f.context);const recorder=vm.runInContext('mediaRecorder',f.context);
  f.element('subtitleProcessor').value='device';recorder.ondataavailable({data:new Blob(['movie'],{type:recorder.mimeType})});await recorder.onstop();
+ assert.equal(calls.length,1);assert.equal(new Headers(calls[0].settings.headers).has('Authorization'),false);
  assert.equal(f.context.processed.subtitleProcessor,'server');
+});
+
+test('Archive retry reaches the server without a code and preserves the active remote identity',async()=>{
+ const f=fixture();const clip={id:123,blob:new Blob(['saved original']),subtitleProcessor:'server',remoteJob:{id:'b'.repeat(32),requestId:'request_0123456789abcdef',status:'queued'}};
+ f.records.set(clip.id,clip);f.context.archivedClip=clip;
+ f.context.RIServerSubtitlePipeline={processClip:async(value)=>{f.context.retriedClip=value;return value;}};
+ await vm.runInContext('processArchivedClip(archivedClip)',f.context);
+ assert.ok(f.context.retriedClip);assert.equal(f.context.retriedClip.blob,clip.blob);assert.equal(f.context.retriedClip.remoteJob,clip.remoteJob);
+ assert.equal(f.context.retriedClip.autoSubtitles,true);assert.equal(vm.runInContext('processing',f.context),false);
 });
 
 test('returning to camera while an older acquisition is pending restarts the current preview',async()=>{

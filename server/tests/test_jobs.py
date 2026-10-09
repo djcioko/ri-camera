@@ -22,7 +22,7 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
         base = Path(self.temp.name)
-        self.config = Config("s" * 40, base/"jobs", base/"model", base/"font.ttf",
+        self.config = Config(base/"jobs", base/"model", base/"font.ttf",
                              ("https://djcioko.github.io",), min_free_bytes=0)
         self.storage = Storage(self.config)
         self.script = base/"worker.py"

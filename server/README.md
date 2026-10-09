@@ -4,20 +4,20 @@ Serviciu separat pentru modulul **Subtitrări** și pentru filmările cu proceso
 
 Destinația aleasă pentru procesare este VPS-ul **OVH**, la `ai.djshopitalia.it`, cu resurse pentru profilul standard și FFmpeg 8.0.1 deja disponibil. Se păstrează modelul large-v3-turbo, limitele și izolarea serviciului; nu este necesar un profil cu model redus. Parametrul `--host ai.djshopitalia.it` selectează explicit vhost-ul TLS pentru verificare și instalare.
 
-Interfața rămâne pe GitHub Pages. Publicarea acestui cod în repository **nu activează automat VPS-ul**. Instalatorul trebuie executat în terminalul serverului de către administrator. Nu introduceți parola SSH, cheia privată sau codul aplicației în GitHub ori în conversații.
+Interfața rămâne pe GitHub Pages. Publicarea acestui cod în repository **nu activează automat VPS-ul**. Instalatorul trebuie executat în terminalul serverului de către administrator. Actualizați mai întâi VPS-ul, verificați accesul public, apoi publicați interfața fără cod.
 
 ## Utilizare
 
-După instalare și publicarea interfeței, deschideți `https://djcioko.github.io/ri-camera/#subtitrari`, alegeți video-ul sau originalul din Arhivă, introduceți codul privat și apăsați **Subtitrează pe server**. Alegerea fișierului nu îl încarcă. Originalul se salvează local înainte de upload și rămâne disponibil separat de rezultat.
+După instalare și publicarea interfeței, deschideți `https://djcioko.github.io/ri-camera/#subtitrari`, alegeți video-ul sau originalul din Arhivă și apăsați **Subtitrează pe server**. Nu este necesar un cod sau un cont. Alegerea fișierului nu îl încarcă. Originalul se salvează local înainte de upload și rămâne disponibil separat de rezultat.
 
-Codul rămâne în memoria paginii; redeschiderea cere reintroducerea lui. Destinația vizibilă este `ai.djshopitalia.it`. Modulul nu pornește camera/microfonul. În camera principală, procesarea pe server este o alegere explicită înainte de filmare; Dispozitiv rămâne alegerea inițială.
+Destinația vizibilă este `ai.djshopitalia.it`. Modulul nu pornește camera/microfonul. În camera principală, procesarea pe server este o alegere explicită înainte de filmare; Dispozitiv rămâne alegerea inițială. Cu procesorul Server și subtitrarea automată activate, oprirea filmării pornește procesarea fără autentificare.
 
 ## Limite și resurse
 
 | Proprietate | Valoare implicită |
 | --- | --- |
 | Original | maximum 512 MiB |
-| Durata originalului | maximum 900 secunde |
+| Durata originalului | maximum 900 secunde (15 minute), inclusiv fișiere de peste 5 minute |
 | Lucrări nefinalizate | maximum 3, cu o singură procesare activă |
 | Spațiu pentru fișierele lucrărilor | maximum 4 GiB, cu rezervă de 2 GiB pe disc |
 | Expirarea rezervării fără upload complet | 15 minute |
@@ -62,25 +62,21 @@ Mesajul **„Este necesar Python 3.12+ cu modulul venv”** dintr-o revizie mai 
 
 Instalatorul identifică exact un bloc TLS cu `server_name ai.djshopitalia.it` în rezultatul real `nginx -T`. Un vhost absent, ambiguu, indirect sau un prefix deja folosit în altă configurație oprește instalarea pentru verificare manuală. Se introduce un singur include în blocul selectat; restul textului rămâne neschimbat.
 
-Fișierele existente care urmează să fie modificate se salvează cu dată într-un director privat `/var/backups/ri-subtitles/`. Instalatorul rulează `nginx -t`, verifică unitățile systemd, pornește numai serviciul propriu și verifică autentificarea și readiness pe socket. Reîncarcă Nginx și verifică ruta HTTPS. Dacă activarea eșuează, restaurează configurațiile salvate și starea anterioară a serviciului. Modelul și release-ul descărcat rămân pentru diagnostic; nu se șterg filmări locale sau datele altor aplicații.
+Fișierele existente care urmează să fie modificate se salvează cu dată într-un director privat `/var/backups/ri-subtitles/`. Instalatorul rulează `nginx -t`, verifică unitățile systemd, pornește numai serviciul propriu și verifică readiness și accesul fără cod pe socket. Reîncarcă Nginx și verifică ruta HTTPS. Dacă activarea eșuează, restaurează configurațiile salvate și starea anterioară a serviciului. Modelul și release-ul descărcat rămân pentru diagnostic; nu se șterg filmări locale sau datele altor aplicații.
 
 La succes, scriptul imprimă revizia, directorul de backup și confirmarea verificării prin socket și HTTPS. Păstrați acest rezultat ca dovadă a activării. O verificare locală a codului sau un PR creat nu înlocuiește acest rezultat.
 
 ### Reluare după un răspuns ne-JSON la activare
 
-O revizie anterioară putea afișa numai `Expecting value: line 1 column 1 (char 0)` dacă o verificare primea HTML, o redirecționare sau un corp gol. Verificatorul raportează acum etapa (socket, autentificare, HTTPS local sau public), codul HTTP, tipul răspunsului și dimensiunea, fără a imprima corpul răspunsului sau codul privat. Verificarea HTTPS așteaptă un interval limitat după reload și acceptă numai HTTP 200 cu un obiect JSON care confirmă `ready: true`. O rută care rămâne greșită provoacă în continuare oprirea și restaurarea configurațiilor.
+O revizie anterioară putea afișa numai `Expecting value: line 1 column 1 (char 0)` dacă o verificare primea HTML, o redirecționare sau un corp gol. Verificatorul raportează etapa (socket, acces public, HTTPS local sau public), codul HTTP, tipul răspunsului și dimensiunea, fără a imprima corpul răspunsului. Verificarea HTTPS așteaptă un interval limitat după reload și acceptă numai HTTP 200 cu un obiect JSON care confirmă `ready: true` și `access: "public"`. O rută care rămâne greșită provoacă în continuare oprirea și restaurarea configurațiilor.
 
 Reluarea se face din noua revizie exactă indicată în PR, cu aceleași comenzi de instalare. Modelul existent este reverificat și refolosit; nu se șterg modelul, release-urile sau backupurile pentru a relua.
 
-### Codul privat
+### Acces public fără cod
 
-Codul este generat aleator pe VPS și păstrat în `/etc/ri-subtitles/service.env`, cu acces doar root. Pentru a-l vedea **doar în terminalul propriu**, administratorul poate rula:
+Serviciul acceptă cereri publice, fără `Authorization`, cod de acces sau cont. Actualizarea elimină vechea variabilă `RI_SUBTITLES_ACCESS_CODE` din configurația activă; copia anterioară rămâne în backupul privat pentru restaurare. Nu se generează și nu se include vreun cod în JavaScript.
 
-```bash
-sudo sed -n 's/^RI_SUBTITLES_ACCESS_CODE=//p' /etc/ri-subtitles/service.env
-```
-
-Introduceți codul în interfața R&I Camera. Nu îl adăugați în surse, URL, rapoarte sau capturi de ecran. Codul comun dă acces la lucrările acestui serviciu; nu există conturi separate sau izolare între mai mulți utilizatori care cunosc același cod. Administratorul îl distribuie doar persoanelor care trebuie să folosească modulul.
+Nu există o listă publică a lucrărilor. Fiecare lucrare primește un identificator aleator de 128 de biți, iar cine cunoaște identificatorul poate consulta rezultatul sau anula lucrarea până la expirare. CORS rămâne limitat la interfața GitHub Pages; acesta nu restricționează accesul clienților HTTP din afara browserului. Limitele de fișier, durată, coadă, procesare și spațiu se aplică tuturor cererilor.
 
 ## Fișiere și operare
 
@@ -91,11 +87,11 @@ Introduceți codul în interfața R&I Camera. Nu îl adăugați în surse, URL, 
 | `/opt/ri-subtitles/current` | Referință la release-ul activ |
 | `/var/lib/ri-subtitles-model/<revizie>` | Model verificat, fără scriere din serviciu |
 | `/var/lib/ri-subtitles` | SQLite și directoare private ale lucrărilor |
-| `/etc/ri-subtitles/service.env` | Cod și configurare, root-only |
+| `/etc/ri-subtitles/service.env` | Configurare și limite, root-only |
 | `/run/ri-subtitles/api.sock` | Socket creat de systemd, acces pentru worker-ul Nginx |
 | `/etc/nginx/snippets/ri-subtitles.conf` | Exclusiv ruta `/api/ri-subtitles/` |
 
-Serviciul are utilizator propriu, fără autentificare interactivă; nu deschide un port TCP. Socketul este creat de systemd și transmis către Uvicorn. `PrivateNetwork` și restricția AF_UNIX împiedică accesul de rețea al worker-ului. Nginx expune HTTPS și transmite cererile autentificate.
+Serviciul are utilizator propriu, fără autentificare interactivă; nu deschide un port TCP. Socketul este creat de systemd și transmis către Uvicorn. `PrivateNetwork` și restricția AF_UNIX împiedică accesul de rețea al worker-ului. Nginx expune HTTPS și transmite cererile către socket.
 
 Comenzi de stare:
 
@@ -104,11 +100,11 @@ sudo systemctl status ri-subtitles.service ri-subtitles.socket --no-pager
 curl --fail https://ai.djshopitalia.it/api/ri-subtitles/v1/health
 ```
 
-O actualizare folosește instalatorul din următoarea revizie revizuită. El păstrează codul privat și limitele opționale din configurare. Modificările manuale ale fișierelor gestionate necesită revizuire înainte de actualizare; scriptul nu le suprascrie automat. Nu ștergeți automat release-uri sau backupuri: verificați mai întâi ce revizie folosește unitatea activă.
+O actualizare folosește instalatorul din următoarea revizie revizuită și păstrează limitele opționale din configurare. Modificările manuale ale fișierelor gestionate necesită revizuire înainte de actualizare; scriptul nu le suprascrie automat. Nu ștergeți automat release-uri sau backupuri: verificați mai întâi ce revizie folosește unitatea activă.
 
 ## API și confidențialitate
 
-Prefix public `https://ai.djshopitalia.it/api/ri-subtitles/v1`; backend `/v1`. Toate cererile private folosesc `Authorization: Bearer <cod>`. Codul este verificat înainte de citirea uploadului. CORS permite exact `https://djcioko.github.io`, fără cookies. Ruta publică `/health` comunică doar readiness și limitele.
+Prefix public `https://ai.djshopitalia.it/api/ri-subtitles/v1`; backend `/v1`. Nicio rută nu cere cod de acces. CORS permite exact `https://djcioko.github.io`, fără cookies. `/health` comunică readiness, `access: "public"` și limitele. Antetul Authorization vechi este acceptat și ignorat pentru compatibilitatea cu paginile încă păstrate în cache.
 
 | Rută | Funcție |
 | --- | --- |
@@ -135,7 +131,7 @@ node --test tests/*.test.js
 bash -n server/scripts/*.sh server/deploy/install.sh
 ```
 
-Testele includ cereri FastAPI/ASGI reale în proces, upload întrerupt, limite, idempotency, anulare cu proces copil, recuperare, expirare, patch-uri Nginx pe configurații de probă și export FFmpeg nativ cu sunet/rotație/diacritice. Testele nu instalează modelul și nu contactează VPS-ul.
+Testele includ cereri FastAPI/ASGI reale fără autentificare, upload întrerupt, limite, idempotency, anulare cu proces copil, recuperare, expirare, patch-uri Nginx pe configurații de probă și export FFmpeg nativ cu sunet/rotație/diacritice. O probă de șase minute verifică păstrarea audio/video și a subtitrării de după minutul cinci; numai recunoașterea este simulată în acea probă, deci timpul testului nu măsoară viteza transcrierii. Testele nu instalează modelul și nu contactează VPS-ul.
 
 Testul opțional `node tests/server-browser-smoke.cjs` folosește Chromium/Playwright, IndexedDB real și un transport HTTP controlat; necesită `RI_QA_MP4` cu un MP4 valid. `RI_CHROMIUM_EXECUTABLE` poate indica un Chromium existent. El verifică originalul salvat înainte de POST, zero acces la cameră pe ruta modulului, lipsa motoarelor locale și salvarea rezultatului înainte de DELETE. Nu dovedește disponibilitatea VPS-ului.
 

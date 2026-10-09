@@ -64,6 +64,8 @@ def decode_probe(body, status, content_type, phase, *, expected_status=None, req
         raise ProbeError(f"{detail}; este necesar un obiect JSON.")
     if require_ready and value.get("ready") is not True:
         raise ProbeError(f"{detail}; ready nu este true.")
+    if require_ready and value.get("access") != "public":
+        raise ProbeError(f"{detail}; accesul public fără cod nu este confirmat.")
     return value
 
 
@@ -96,13 +98,13 @@ def state(unit, action):
                           stderr=subprocess.DEVNULL).returncode == 0
 
 
-def uds_request(method, path, code=None, *, phase="UDS", expected_status=None, require_ready=False):
+def uds_request(method, path, *, phase="UDS", expected_status=None, require_ready=False):
     connection = http.client.HTTPConnection("localhost", timeout=5)
     try:
         connection.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         connection.sock.settimeout(5)
         connection.sock.connect("/run/ri-subtitles/api.sock")
-        connection.request(method, path, headers={"Authorization": "Bearer " + code} if code else {})
+        connection.request(method, path)
         response = connection.getresponse()
         body = response.read(PROBE_MAX_BYTES + 1)
         return response.status, decode_probe(body, response.status, response.getheader("Content-Type"), phase,
@@ -222,6 +224,18 @@ def create_release(source):
     return release, revision
 
 
+def service_environment(release, previous=""):
+    text = ("RI_SUBTITLES_DATA_DIR=/var/lib/ri-subtitles\n"
+            f"RI_SUBTITLES_MODEL_DIR={MODEL}\n"
+            f"RI_SUBTITLES_FONT_PATH={release}/assets/subtitles-font.ttf\n"
+            "RI_SUBTITLES_ALLOWED_ORIGINS=https://djcioko.github.io\n")
+    # Preserve operator-set limits while retiring the former shared credential.
+    replaced = {line.split("=", 1)[0] for line in text.splitlines()} | {"RI_SUBTITLES_ACCESS_CODE"}
+    optional = [line for line in previous.splitlines()
+                if line.startswith("RI_SUBTITLES_") and line.split("=", 1)[0] not in replaced]
+    return text + ("\n".join(optional) + "\n" if optional else "")
+
+
 def install(source, host=DEFAULT_HOST):
     host = validate_host(host)
     read_marker_for_host(host)
@@ -275,23 +289,7 @@ def install(source, host=DEFAULT_HOST):
                     "WhisperModel(__import__('sys').argv[1], device='cpu', compute_type='int8', cpu_threads=2, num_workers=1, local_files_only=True)", str(MODEL)],
                    env=environment, cwd=release, user=account.pw_uid, group=account.pw_gid, extra_groups=(), check=True, timeout=180)
     service_env = CONFIG / "service.env"
-    if service_env.exists():
-        code_lines = [line.split("=", 1)[1] for line in service_env.read_text().splitlines() if line.startswith("RI_SUBTITLES_ACCESS_CODE=")]
-        if len(code_lines) != 1 or len(code_lines[0]) < 32:
-            raise PreflightError("Codul privat existent nu este valid; nu este înlocuit automat.")
-        code = code_lines[0]
-    else:
-        code = secrets.token_urlsafe(32)
-    env_text = (f"RI_SUBTITLES_ACCESS_CODE={code}\n"
-                "RI_SUBTITLES_DATA_DIR=/var/lib/ri-subtitles\n"
-                f"RI_SUBTITLES_MODEL_DIR={MODEL}\n"
-                f"RI_SUBTITLES_FONT_PATH={release}/assets/subtitles-font.ttf\n"
-                "RI_SUBTITLES_ALLOWED_ORIGINS=https://djcioko.github.io\n")
-    # Existing operator-set limits persist across upgrades.
-    if service_env.exists():
-        required = {line.split("=", 1)[0] for line in env_text.splitlines()}
-        env_text += "\n".join(line for line in service_env.read_text().splitlines()
-                              if line.startswith("RI_SUBTITLES_") and line.split("=", 1)[0] not in required) + "\n"
+    env_text = service_environment(release, service_env.read_text() if service_env.exists() else "")
     timestamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup = Path("/var/backups/ri-subtitles") / (timestamp + "-" + secrets.token_hex(3))
     backup.mkdir(parents=True, mode=0o700)
@@ -337,10 +335,8 @@ def install(source, host=DEFAULT_HOST):
         run(["systemctl", "start", "ri-subtitles.socket"])
         run(["systemctl", "restart", "ri-subtitles.service"])
         wait_ready()
-        print("Verificare: UDS auth fără cod (401).", flush=True)
-        uds_request("GET", "/v1/jobs/" + "0" * 32, phase="UDS auth fără cod", expected_status=401)
-        print("Verificare: UDS auth cu cod (404).", flush=True)
-        uds_request("GET", "/v1/jobs/" + "0" * 32, code, phase="UDS auth cu cod", expected_status=404)
+        print("Verificare: UDS acces public fără cod (404 pentru lucrare inexistentă).", flush=True)
+        uds_request("GET", "/v1/jobs/" + "0" * 32, phase="UDS public fără cod", expected_status=404)
         run(["systemctl", "reload", "nginx"])
         verify_https(host)
         if not state("ri-subtitles.service", "is-active") or not state("ri-subtitles.socket", "is-active"):
@@ -381,7 +377,7 @@ def install(source, host=DEFAULT_HOST):
     print("Serviciul de subtitrare este activ și verificat prin socket și HTTPS.")
     print("Revizie:", revision)
     print("Backup privat:", backup)
-    print("Codul de acces rămâne în /etc/ri-subtitles/service.env; nu îl includeți în rapoarte sau mesaje.")
+    print("Acces public activ: subtitrarea funcționează fără cod de acces.")
 
 
 def main():

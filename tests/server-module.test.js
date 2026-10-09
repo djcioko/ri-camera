@@ -1,13 +1,16 @@
 const test=require('node:test');const assert=require('node:assert/strict');
 let api={};try{api=require('../subtitle-module.js');}catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;}
 function element(){return {value:'',files:[],textContent:'',disabled:false,classList:{toggle(){}},replaceChildren(){},appendChild(){},addEventListener(){}};}
-function fixture(){const controls=new Map(); const document={getElementById:id=>{if(!controls.has(id))controls.set(id,element());return controls.get(id);},createElement:()=>element()}; const events=[];const module=api.createModule({document,isBusy:()=>false,getClips:async()=>[],process:async clip=>events.push(clip),onOpen:()=>events.push('open')});return {module,events,controls};}
-test('choosing MOV keeps selection private until explicit subtitle action without browser metadata',async()=>{
+function fixture(clips=[]){const controls=new Map(); const document={getElementById:id=>{if(!controls.has(id))controls.set(id,element());return controls.get(id);},createElement:()=>element()}; const events=[];const module=api.createModule({document,isBusy:()=>false,getClips:async()=>clips,process:async clip=>events.push(clip),onOpen:()=>events.push('open')});return {module,events,controls};}
+test('choosing MOV waits for explicit subtitle action and submits without a code or browser metadata',async()=>{
  assert.equal(typeof api.createModule,'function');const f=fixture(); const file=new Blob(['mov'],{type:'video/quicktime'});file.name='real-name.mov';f.controls.get('subtitleFile').files=[file];f.controls.get('subtitleFile').onchange();assert.equal(f.events.length,0);
- f.controls.get('subtitleAccessCode').value='private';f.controls.get('subtitleAccessCode').oninput();await f.controls.get('btnServerSubtitle').onclick();assert.equal(f.events.length,1);assert.equal(f.events[0].originalName,'real-name.mov');assert.equal(f.events[0].subtitleProcessor,'server');assert.equal(f.events[0].blob,file);assert.equal(f.events[0].width,undefined);
+ await f.controls.get('btnServerSubtitle').onclick();assert.equal(f.events.length,1);assert.equal(f.events[0].originalName,'real-name.mov');assert.equal(f.events[0].subtitleProcessor,'server');assert.equal(f.events[0].blob,file);assert.equal(f.events[0].width,undefined);
 });
-test('private code stays in module memory and never enters clip metadata',async()=>{
- assert.equal(typeof api.createModule,'function');const f=fixture();const input=f.controls.get('subtitleAccessCode');input.value='secret';input.oninput();assert.equal(f.module.getAccessCode(),'secret');const file=new Blob(['movie']);file.name='x.mov';f.controls.get('subtitleFile').files=[file];f.controls.get('subtitleFile').onchange();await f.controls.get('btnServerSubtitle').onclick();assert.equal(JSON.stringify(f.events[0]).includes('secret'),false);
+test('an archived original resumes publicly only after the explicit subtitle action',async()=>{
+ const clip={id:12,originalName:'film.mov',blob:new Blob(['movie']),remoteJob:{id:'a'.repeat(32),requestId:'request_0123456789abcdef',status:'queued'}};
+ const f=fixture([clip]);await f.module.refresh();f.controls.get('subtitleArchive').value='12';f.controls.get('subtitleArchive').onchange();
+ assert.equal(f.events.length,0);await f.controls.get('btnServerSubtitle').onclick();
+ assert.equal(f.events.length,1);assert.equal(f.events[0].blob,clip.blob);assert.equal(f.events[0].remoteJob,clip.remoteJob);assert.equal(f.events[0].subtitleProcessor,'server');assert.equal(f.events[0].autoSubtitles,true);
 });
 function fakeDb(initial) {
  let stored=initial, writes=0; const tx={error:null,objectStore:()=>({get:()=>{const request={};queueMicrotask(()=>{request.result=stored;request.onsuccess();queueMicrotask(()=>tx.oncomplete());});return request;},put:clip=>{writes++;stored=clip;}})};

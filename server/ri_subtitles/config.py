@@ -5,7 +5,6 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class Config:
-    access_code: str
     data_dir: Path
     model_dir: Path
     font_path: Path
@@ -22,8 +21,6 @@ class Config:
     max_pixels: int = 16777216
 
     def __post_init__(self):
-        if len(self.access_code) < 32 or not self.access_code.isascii() or any(c.isspace() for c in self.access_code):
-            raise ValueError("RI_SUBTITLES_ACCESS_CODE must contain at least 32 private ASCII characters")
         for field in ("data_dir", "model_dir", "font_path"):
             object.__setattr__(self, field, Path(getattr(self, field)).absolute())
         if not self.allowed_origins or any(not origin.startswith("https://") or origin.endswith("/") or "*" in origin for origin in self.allowed_origins):
@@ -36,7 +33,7 @@ class Config:
 
     @classmethod
     def from_env(cls):
-        required = ("ACCESS_CODE", "DATA_DIR", "MODEL_DIR", "FONT_PATH", "ALLOWED_ORIGINS")
+        required = ("DATA_DIR", "MODEL_DIR", "FONT_PATH", "ALLOWED_ORIGINS")
         missing = [name for name in required if not os.environ.get("RI_SUBTITLES_" + name)]
         if missing:
             raise ValueError("Missing subtitle service configuration: " + ", ".join(missing))

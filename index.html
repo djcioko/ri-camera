@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>R&I Camera — Șantier</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=6" />
+  <link rel="stylesheet" href="styles.css?v=7" />
   <link rel="icon" href="assets/logo.png" />
 </head>
 <body>
@@ -45,9 +45,7 @@
     <input id="subtitleFile" type="file" accept="video/*,.mov,.mp4,.webm,.mkv" />
     <label for="subtitleArchive">Sau original din Arhivă</label>
     <select id="subtitleArchive"><option value="">Alege un original din Arhivă</option></select>
-    <label for="subtitleAccessCode">Cod privat de acces · ai.djshopitalia.it</label>
-    <input id="subtitleAccessCode" class="private-code" type="password" autocomplete="off" spellcheck="false" />
-    <p class="subtitle-help">Codul rămâne numai în această pagină și trebuie introdus din nou după reîncărcare. Alegerea unui fișier nu îl transmite.</p>
+    <p class="subtitle-help">Alegerea unui fișier nu îl transmite. Apasă Subtitrează pe server pentru a începe.</p>
     <button id="btnServerSubtitle" class="pill subtitle-submit" type="button">Subtitrează pe server</button>
     <p id="subtitleModuleStatus" role="status" aria-live="polite">Alege un videoclip sau un original din Arhivă.</p>
     <p class="subtitle-help">Rezultatul MP4 și textul SRT se descarcă din Arhivă. Pentru o lucrare întreruptă, selectează același original și apasă din nou: aplicația reconectează lucrarea deja trimisă.</p>
@@ -82,7 +80,6 @@
         <select id="subtitleProcessor"><option value="device">Dispozitiv</option><option value="server">Server ai.djshopitalia.it</option></select>
       </label>
       <p id="processorDescription" class="subtitle-help"></p>
-      <input id="cameraAccessCode" class="private-code hidden" type="password" autocomplete="off" aria-label="Cod privat de acces pentru server ai.djshopitalia.it" placeholder="Cod privat de acces · ai.djshopitalia.it" />
       <div class="sliders">
         <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
         <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
@@ -103,15 +100,15 @@
     <div id="clipList" class="clip-list"></div>
   </aside>
 
-  <script src="overlay-utils.js?v=6"></script>
-  <script src="media-utils.js?v=6"></script>
-  <script src="subtitle-utils.js?v=6"></script>
-  <script src="media-processor.js?v=6"></script>
-  <script src="speech-recognizer.js?v=6"></script>
-  <script src="server-subtitle-client.js?v=6"></script>
-  <script src="server-subtitle-pipeline.js?v=6"></script>
-  <script src="subtitle-module.js?v=6"></script>
-  <script src="recording-pipeline.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="overlay-utils.js?v=7"></script>
+  <script src="media-utils.js?v=7"></script>
+  <script src="subtitle-utils.js?v=7"></script>
+  <script src="media-processor.js?v=7"></script>
+  <script src="speech-recognizer.js?v=7"></script>
+  <script src="server-subtitle-client.js?v=7"></script>
+  <script src="server-subtitle-pipeline.js?v=7"></script>
+  <script src="subtitle-module.js?v=7"></script>
+  <script src="recording-pipeline.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

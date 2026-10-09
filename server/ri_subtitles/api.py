@@ -1,5 +1,4 @@
 import asyncio
-import hmac
 import json
 import os
 import re
@@ -21,22 +20,6 @@ from .storage import JobError, Storage
 def error_response(status, code, message):
     return JSONResponse({"error": {"code": code, "message": message}}, status_code=status,
                         headers={"Cache-Control": "no-store"})
-
-
-class AuthMiddleware:
-    """Check the header at the ASGI boundary before anything can consume the body."""
-    def __init__(self, app, access_code):
-        self.app, self.expected = app, ("Bearer " + access_code).encode("ascii")
-
-    async def __call__(self, scope, receive, send):
-        if scope["type"] == "http":
-            public = scope["path"] == "/v1/health" and scope["method"] == "GET"
-            preflight = scope["method"] == "OPTIONS"
-            headers = [value for key, value in scope.get("headers", []) if key.lower() == b"authorization"]
-            if not public and not preflight and (len(headers) != 1 or not hmac.compare_digest(headers[0], self.expected)):
-                await error_response(401, "unauthorized", "Este necesar un cod privat valid")(scope, receive, send)
-                return
-        await self.app(scope, receive, send)
 
 
 def model_ready(config):
@@ -83,7 +66,6 @@ def create_app(config=None):
     app.state.config, app.state.storage, app.state.supervisor = config, storage, supervisor
     app.state.ready = False
     supervisor.processing_enabled = False
-    app.add_middleware(AuthMiddleware, access_code=config.access_code)
     app.add_middleware(CORSMiddleware, allow_origins=list(config.allowed_origins), allow_credentials=False,
                        allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["Authorization", "Content-Type"],
                        expose_headers=["Content-Length", "Content-Disposition"])
@@ -102,7 +84,7 @@ def create_app(config=None):
 
     @app.get("/v1/health")
     async def health():
-        return JSONResponse({"ready": app.state.ready, "limits": config.limits()}, headers={"Cache-Control": "no-store"})
+        return JSONResponse({"ready": app.state.ready, "access": "public", "limits": config.limits()}, headers={"Cache-Control": "no-store"})
 
     def snapshot(row):
         return JSONResponse(storage.snapshot(row), headers={"Cache-Control": "no-store"})
