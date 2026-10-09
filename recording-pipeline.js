@@ -8,6 +8,7 @@
   }
 
   function recoverInterruptedClip(clip) {
+    if (clip.remoteJob && clip.remoteJob.id) return clip;
     if (!["pending", "transcribing", "rendering"].includes(clip.subtitleStatus)) return clip;
     return { ...clip, subtitleStatus: "interrupted", subtitleError: "Prelucrarea a fost întreruptă. Poți relua din Arhivă." };
   }
@@ -34,6 +35,13 @@
   }
 
   async function processClip(originalClip, dependencies) {
+    // The explicit processor boundary prevents any browser ASR/FFmpeg fallback.
+    if (originalClip.subtitleProcessor === "server") {
+      if (originalClip.autoSubtitles === false) return originalClip;
+      const remote = dependencies.serverPipeline || (typeof globalThis !== "undefined" && globalThis.RIServerSubtitlePipeline);
+      if (!remote) throw new Error("Procesarea pe server nu este disponibilă.");
+      return remote.processClip(originalClip, dependencies);
+    }
     const { persist, media, speech, subtitles, signal, onProgress = () => {} } = dependencies;
     let clip = { ...originalClip };
     const update = async (changes) => {

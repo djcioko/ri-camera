@@ -11,6 +11,25 @@ Aplicație web instalabilă (PWA) pentru filmări de șantier, cu camera și mic
 - Fișier **SRT** separat cu textul și timpii subtitrării.
 - Filmarea originală și rezultatul subtitrat păstrate separat în Arhivă (IndexedDB).
 - Progres, oprirea prelucrării și reluare din Arhivă. Dacă textul a fost deja calculat, o reluare după un export nereușit refolosește acei timpi.
+- **Modul separat „Subtitrări”** pentru un fișier video din telefon sau un original din Arhivă, cu procesare pe VPS-ul `ai.djshopitalia.it`.
+- Procesor selectabil pentru filmările noi: **Dispozitiv** sau **Server ai.djshopitalia.it**. Alegerea inițială rămâne Dispozitiv; modulul separat folosește serverul.
+
+## Modulul separat de subtitrare
+
+După publicarea acestei versiuni și activarea serviciului VPS, deschide **Subtitrări** din bara de sus sau ruta `#subtitrari`. Modulul nu cere acces la cameră sau microfon.
+
+1. Alege un video din dispozitiv sau un original din Arhivă. Alegerea fișierului nu îl transmite.
+2. Introdu codul privat primit de la administratorul VPS-ului. Codul rămâne doar în memoria paginii și trebuie introdus din nou după redeschidere.
+3. Apasă **Subtitrează pe server**. Aplicația salvează originalul în Arhivă înainte să îl trimită către `ai.djshopitalia.it`.
+4. La final găsești **MP4 subtitrat**, **Text SRT** și **Original** în Arhivă. Pentru un video fără vorbire, rezultatul este un MP4 fără subtitrare.
+
+Procesarea pe server folosește VPS-ul **OVH**, la `ai.djshopitalia.it`. Modelul vocal și limitele profilului standard sunt păstrate; interfața și Arhiva rămân în R&I Camera de pe GitHub Pages.
+
+Pentru subtitrarea automată a filmărilor noi pe VPS, alege **Server ai.djshopitalia.it** înainte să pornești filmarea și lasă subtitrarea automată bifată. Procesorul ales la început rămâne valabil pentru întreaga filmare. Dacă subtitrarea este oprită în modul server, se păstrează originalul fără procesare.
+
+Procesarea pe server necesită internet. Modelul vocal și motorul de export rulează pe VPS, fără descărcarea lor pe telefon în acest mod. O întrerupere de rețea păstrează originalul și referința lucrării: din Arhivă poți reconecta sau relua salvarea rezultatului. Oprirea este confirmată doar după răspunsul serverului. Fișierele de pe VPS expiră în cel mult 24 de ore, iar copia finalizată este ștearsă mai devreme după salvarea rezultatului în browser.
+
+Limite inițiale: 512 MiB/clip, 15 minute, 3 lucrări nefinalizate și o procesare simultană. Administratorul instalează serviciul separat conform [server/README.md](server/README.md). Publicarea interfeței pe GitHub Pages nu instalează serviciul pe VPS.
 
 ## Cum o folosești
 
@@ -28,13 +47,13 @@ Dacă stocarea locală este plină sau indisponibilă, aplicația oferă un buto
 
 Funcția transcrie **vorbirea în română**. Nu este un serviciu de traducere din alte limbi. Primește pista microfonului folosit la filmare; nu identifică automat persoana care vorbește și nu separă prezentatorul de alte voci captate de același microfon. Pentru subtitrarea prezentatorului, folosește un microfon apropiat de acesta.
 
-Înregistrările audio/video nu sunt încărcate pe un serviciu de transcriere. Recunoașterea vocală și exportul rulează local, în Web Workers. Nu sunt necesare conturi, chei API sau plăți pe filmare. La prima folosire se descarcă **aproximativ 820 MB**: circa 759 MB pentru model și restul pentru motoarele și fișierele de procesare. Folosește Wi-Fi pentru prima descărcare. Modelul și motorul video sunt păstrate în cache când browserul și spațiul disponibil permit. După ștergerea cache-ului este necesară o nouă descărcare.
+În modul **Dispozitiv**, înregistrările audio/video nu sunt încărcate pe un serviciu de transcriere. Recunoașterea vocală și exportul rulează local, în Web Workers. La prima folosire locală se descarcă **aproximativ 820 MB**: circa 759 MB pentru model și restul pentru motoarele și fișierele de procesare. Folosește Wi-Fi pentru prima descărcare. Modelul și motorul video sunt păstrate în cache când browserul și spațiul disponibil permit. După ștergerea cache-ului este necesară o nouă descărcare. În modul **Server ai.djshopitalia.it**, video-ul este trimis explicit către VPS-ul ales, folosind codul privat; nu este trimis unui API extern de transcriere. Modelul de pe VPS are aproximativ 1,62 GB și se descarcă o singură dată la instalare.
 
 Procesarea pe telefon poate dura, în special pentru clipuri lungi sau rezoluții mari. Aplicația eliberează motorul video înainte de transcriere și modelul vocal înainte de export, pentru a reduce memoria folosită simultan. Păstrează pagina în prim-plan. Verifică textul rezultat, mai ales la nume proprii, termeni tehnici, zgomot puternic sau voci suprapuse; recunoașterea automată poate greși.
 
 ## Publicare sau actualizare
 
-Aplicația este statică: nu are nevoie de un backend, de un pas de build sau de configurarea unui serviciu cloud.
+Interfața și modul Dispozitiv sunt statice și nu necesită un pas de build. Modul Server necesită și serviciul VPS separat din [server/README.md](server/README.md).
 
 1. Publică **întregul conținut al folderului aplicației**, inclusiv `vendor/ffmpeg/`, fontul din `assets/` și noile fișiere JavaScript, în rădăcina proiectului `djcioko/ri-camera` sau pe un hosting HTTPS.
 2. Pe GitHub Pages, configurația obișnuită este **Deploy from a branch → main → / (root)**. Publicarea necesită acces de scriere la acel repository.
@@ -48,6 +67,10 @@ Service worker-ul folosește un cache nou pentru interfață și păstrează sep
 | --- | --- |
 | `app.js` | Cameră, captură, salvare în Arhivă, progres, anulare, reîncercare și descărcări |
 | `recording-pipeline.js` | Salvarea originalului înainte de procesare și stările persistente ale fiecărui clip |
+| `subtitle-module.js` | Modulul separat, alegerea fișierului și codul privat păstrat în memorie |
+| `server-subtitle-client.js` | Protocolul HTTPS autentificat și verificarea răspunsurilor serverului |
+| `server-subtitle-pipeline.js` | Încărcare, reconectare, salvare condiționată și anulare confirmată |
+| `server/` | API FastAPI, coadă persistentă, worker nativ și instalator pentru VPS |
 | `speech-recognizer.js` | Interfața cu worker-ul de recunoaștere, anulare, verificarea tăcerii și termen-limită |
 | `subtitle-worker.js` | Modelul Whisper multilingv, versiunile fixate și transcrierea în română |
 | `subtitle-utils.js` | Intervale valide, împărțirea textului în subtitrări și export SRT/WebVTT/ASS |

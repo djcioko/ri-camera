@@ -25,6 +25,14 @@ let processingController = null;
 let wakeLock = null;
 let emergencyClip = null;
 const chkSubtitles = document.getElementById("chkSubtitles");
+const processorSelect = document.getElementById("subtitleProcessor");
+const cameraAccessCode = document.getElementById("cameraAccessCode");
+let subtitleModule = null;
+let userCancelledProcessing = false;
+let cameraGeneration = 0;
+function subtitleRoute() { return !!(window.location && window.location.hash === "#subtitrari"); }
+function currentProcessor() { return processorSelect && processorSelect.value === "server" ? "server" : "device"; }
+function accessCode() { return (subtitleModule && subtitleModule.getAccessCode()) || (cameraAccessCode && cameraAccessCode.value.trim()) || ""; }
 
 // Încărcare imagini din folderul assets
 const logoImg = new Image();
@@ -140,7 +148,18 @@ function selectedClipBlob(clip) {
 }
 
 function extensionFor(blob) {
-  return blob.type.toLowerCase().includes("mp4") ? "mp4" : "webm";
+  const type = blob.type.toLowerCase();
+  if (type.includes("quicktime")) return "mov";
+  if (type.includes("matroska")) return "mkv";
+  return type.includes("mp4") ? "mp4" : "webm";
+}
+function originalFilename(clip) {
+  return clip.originalName || `RI_${safeFilename(clip.site)}_${clip.id}_original.${extensionFor(clip.blob)}`;
+}
+async function patchRemoteClip(id, requestId, changes) {
+  const clip = await RISubtitleModule.patchRemoteClip(await openDb(), STORE, id, requestId, changes);
+  refreshLibrarySafely();
+  return clip;
 }
 
 function safeFilename(value) {
@@ -157,7 +176,11 @@ function subtitleStatusText(clip) {
     disabled: "Subtitrarea automată a fost oprită pentru acest clip.",
     failed: "Prelucrarea nu a reușit. Filmarea originală este disponibilă.",
     cancelled: "Prelucrare oprită. Poți relua oricând.",
-    interrupted: "Prelucrare întreruptă. Poți relua oricând.",
+    interrupted: "Conexiune sau salvare întreruptă. Reia din Arhivă.",
+    awaiting_upload: "Original salvat. Transferul poate fi reluat.",
+    uploading: "Originalul se trimite către ai.djshopitalia.it…",
+    queued: "Lucrare în așteptare pe ai.djshopitalia.it…",
+    expired: "Lucrarea a expirat. Poți porni o lucrare nouă.",
   };
   const label = labels[clip.subtitleStatus] || "Poți adăuga subtitrare în română acestui clip.";
   return label + (clip.subtitleError ? "\n" + clip.subtitleError : "");
@@ -236,19 +259,19 @@ async function refreshLibrary() {
     };
     const filename = `RI_${safeFilename(c.site)}_${c.id}`;
     addButton("dl", c.captionedBlob ? "⬇ MP4 subtitrat" : `⬇ ${extensionFor(output).toUpperCase()}`, () => {
-      downloadBlob(output, `${filename}${c.captionedBlob ? "_subtitrat_ro" : ""}.${extensionFor(output)}`);
+      downloadBlob(output, output === c.blob ? originalFilename(c) : `${filename}${c.captionedBlob ? "_subtitrat_ro" : ""}.${extensionFor(output)}`);
     });
     if (output !== c.blob) {
-      addButton("original", "⬇ Original", () => downloadBlob(c.blob, `${filename}_original.${extensionFor(c.blob)}`));
+      addButton("original", "⬇ Original", () => downloadBlob(c.blob, originalFilename(c)));
     }
     if (c.subtitleCues && c.subtitleCues.length) {
-      addButton("srt", "⬇ Text SRT", () => downloadBlob(new Blob([RISubtitleUtils.toSrt(c.subtitleCues)], { type: "application/x-subrip;charset=utf-8" }), `${filename}.ro.srt`));
+      addButton("srt", "⬇ Text SRT", () => downloadBlob(c.srtBlob || new Blob([RISubtitleUtils.toSrt(c.subtitleCues)], { type: "application/x-subrip;charset=utf-8" }), `${filename}.ro.srt`));
     }
     if (!c.captionedBlob) {
       const retry = ["failed", "cancelled", "interrupted"].includes(c.subtitleStatus);
       addButton("subtitles", retry ? "↻ Reia subtitrarea RO" : "Adaugă subtitrare RO", () => processArchivedClip(c), processing || recording);
     }
-    if (!output.type.toLowerCase().includes("mp4")) {
+    if (c.subtitleProcessor !== "server" && !output.type.toLowerCase().includes("mp4")) {
       addButton("mp4", "Pregătește MP4", () => prepareArchivedClipAsMp4(c), processing || recording);
     }
     addButton("del", "🗑 Șterge", async () => {
@@ -284,6 +307,9 @@ function updateBusyUi() {
   document.getElementById("btnRec").setAttribute("aria-label", recording ? "Oprește înregistrarea" : "Înregistrează");
   document.getElementById("btnFlipBig").disabled = recording || processing || cameraOpening;
   chkSubtitles.disabled = recording || processing;
+  if (processorSelect) processorSelect.disabled = recording || processing;
+  const openSubtitles = document.getElementById("btnSubtitles");
+  if (openSubtitles) openSubtitles.disabled = recording;
   document.getElementById("btnCancelProcess").classList.toggle("hidden", !processing || !processingController);
 }
 
@@ -318,16 +344,21 @@ window.addEventListener("beforeunload", (event) => {
 function pipelineDependencies() {
   return {
     persist: persistClip,
+    patchRemote: patchRemoteClip,
+    serverPipeline: window.RIServerSubtitlePipeline,
+    client: window.RIServerSubtitleClient ? RIServerSubtitleClient.createClient({ getAccessCode: accessCode }) : null,
+    isUserCancellation: () => userCancelledProcessing,
     media: RIMediaProcessor,
     speech: RISpeechRecognizer,
     subtitles: RISubtitleUtils,
     signal: processingController.signal,
-    onProgress: setExportStatus,
+    onProgress: (message) => { setExportStatus(message); if (subtitleModule) subtitleModule.setStatus(message); },
   };
 }
 
 function beginProcessing() {
   processing = true;
+  userCancelledProcessing = false;
   processingController = new AbortController();
   document.getElementById("btnCancelProcess").disabled = false;
   document.getElementById("library").classList.add("hidden");
@@ -343,11 +374,14 @@ async function finishProcessing() {
   await refreshLibrarySafely();
 }
 
-async function processArchivedClip(clip) {
+async function processArchivedClip(clip, forceServer = false) {
   if (processing || recording) return;
   try {
     beginProcessing();
-    if (!(clip.width > 0 && clip.height > 0)) {
+    clip = { ...clip, subtitleProcessor: forceServer ? "server" : (clip.subtitleProcessor || currentProcessor()) };
+    if (clip.subtitleProcessor === "server" && !accessCode()) throw new Error("Introdu codul privat în modulul Subtitrări.");
+    if (clip.subtitleProcessor === "server" && clip.remoteJob && ["cancelled", "failed", "expired", "cleaned"].includes(clip.remoteJob.status)) clip = { ...clip, remoteJob: undefined };
+    if (clip.subtitleProcessor !== "server" && !(clip.width > 0 && clip.height > 0)) {
       setExportStatus("Se citește dimensiunea filmării…");
       const dimensions = await readClipDimensions(clip.blob, processingController.signal);
       clip = { ...clip, ...dimensions };
@@ -413,6 +447,7 @@ async function prepareArchivedClipAsMp4(clip) {
 document.getElementById("btnCancelProcess").onclick = () => {
   if (!processingController) return;
   document.getElementById("btnCancelProcess").disabled = true;
+  userCancelledProcessing = true;
   processingController.abort();
   setExportStatus("Se oprește prelucrarea…");
 };
@@ -427,7 +462,8 @@ document.getElementById("btnRescue").onclick = () => {
 async function startCamera() {
   // Serialize acquisition through preview readiness, so a late camera request
   // cannot replace the video while a different microphone is being recorded.
-  if (cameraOpening) return;
+  if (cameraOpening || subtitleRoute()) return;
+  const generation = cameraGeneration;
   cameraOpening = true;
   const previousStream = stream;
   stream = null;
@@ -444,8 +480,10 @@ async function startCamera() {
         frameRate: { ideal: 60, min: 30 }
       },
     });
+    if (generation !== cameraGeneration || subtitleRoute()) { openedStream.getTracks().forEach(track => track.stop()); return; }
     liveVideo.srcObject = openedStream;
     await liveVideo.play();
+    if (generation !== cameraGeneration || subtitleRoute()) { openedStream.getTracks().forEach(track => track.stop()); liveVideo.srcObject = null; return; }
     stream = openedStream;
 
     const track = stream.getVideoTracks()[0];
@@ -471,6 +509,9 @@ async function startCamera() {
   } finally {
     cameraOpening = false;
     updateBusyUi();
+    // Returning from the module may have been blocked by this old acquisition.
+    // Start a new request after releasing the serialized camera lock.
+    if (generation !== cameraGeneration && !subtitleRoute() && !stream) Promise.resolve().then(startCamera);
   }
 }
 
@@ -635,7 +676,7 @@ canvas.addEventListener("wheel", (event) => {
 
 // Înregistrare video din Canvas. Fiecare înregistrare are propriile bucăți și metadate.
 function startRecording() {
-  if (recording || processing || cameraOpening || emergencyClip) return;
+  if (recording || processing || cameraOpening || emergencyClip || subtitleRoute()) return;
   if (!stream || !stream.getVideoTracks().some((track) => track.readyState === "live") || !canvas.width || !canvas.height) {
     alert("Pornește camera și microfonul înainte de înregistrare.");
     return;
@@ -654,6 +695,7 @@ function startRecording() {
       createdAt: new Date().toISOString(),
       site: (document.getElementById("siteName").value || "șantier").trim(),
       autoSubtitles: chkSubtitles.checked,
+      subtitleProcessor: currentProcessor(),
       width: canvas.width,
       height: canvas.height,
     };
@@ -793,6 +835,49 @@ siteInput.oninput = () => localStorage.setItem("ri_site_name", siteInput.value);
 chkSubtitles.checked = localStorage.getItem("ri_auto_subtitles") !== "false";
 chkSubtitles.onchange = () => localStorage.setItem("ri_auto_subtitles", String(chkSubtitles.checked));
 
+
+if (window.RISubtitleModule) {
+  subtitleModule = RISubtitleModule.createModule({
+    document, getClips, isBusy: () => recording || processing,
+    process: clip => processArchivedClip(clip, true),
+    onOpen: () => {
+      cameraGeneration++;
+      if (stream) { stream.getTracks().forEach(track => track.stop()); stream = null; }
+      liveVideo.srcObject = null;
+      analyser = null;
+      document.getElementById("stageArea")?.classList.add("hidden");
+      document.getElementById("controlPanel").classList.add("hidden");
+      updateBusyUi();
+    },
+  });
+  document.getElementById("btnSubtitles").onclick = () => { if (!recording) window.location.hash = "subtitrari"; };
+  document.getElementById("btnCloseSubtitles").onclick = () => { window.location.hash = "camera"; };
+  window.addEventListener("hashchange", async () => {
+    if (subtitleRoute()) {
+      if (recording) { window.location.hash = "camera"; return; }
+      await subtitleModule.show();
+    } else {
+      subtitleModule.hide();
+      document.getElementById("stageArea")?.classList.remove("hidden");
+      document.getElementById("controlPanel").classList.remove("hidden");
+      await startCamera();
+    }
+  });
+}
+if (processorSelect) {
+  processorSelect.value = localStorage.getItem("ri_subtitle_processor") === "server" ? "server" : "device";
+  const updateProcessorDescription = () => {
+    const description = document.getElementById("processorDescription");
+    if (description) description.textContent = currentProcessor() === "server"
+      ? "Cu subtitrarea activă, originalul se trimite către ai.djshopitalia.it. Modelul vocal și conversia rulează pe server. Cu subtitrarea oprită se salvează numai originalul. Introdu codul privat de acces mai jos."
+      : "Procesare pe acest dispozitiv. Prima utilizare descarcă aproximativ 820 MB; folosește Wi-Fi. Păstrează aplicația deschisă.";
+    if (cameraAccessCode) cameraAccessCode.classList.toggle("hidden", currentProcessor() !== "server");
+  };
+  processorSelect.onchange = () => { localStorage.setItem("ri_subtitle_processor", currentProcessor()); updateProcessorDescription(); };
+  updateProcessorDescription();
+}
+if (cameraAccessCode) cameraAccessCode.oninput = () => { if (subtitleModule) subtitleModule.setAccessCode(cameraAccessCode.value); };
+
 (async () => {
   updateBusyUi();
   try {
@@ -801,7 +886,8 @@ chkSubtitles.onchange = () => localStorage.setItem("ri_auto_subtitles", String(c
       if (recovered !== clip) await useClipsStore("readwrite", (store) => store.put(recovered));
     }
   } catch (error) { setExportStatus("Arhiva nu este disponibilă: " + error.message); }
-  await startCamera();
+  if (subtitleRoute()) { if (subtitleModule) await subtitleModule.show(); }
+  else await startCamera();
   await refreshLibrarySafely();
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("./sw.js").catch((error) => console.warn("Modul offline nu este disponibil", error));
