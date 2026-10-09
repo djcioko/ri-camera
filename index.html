@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>R&I Camera — Șantier</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=4" />
   <link rel="icon" href="assets/logo.png" />
 </head>
 <body>
@@ -36,6 +36,15 @@
       <div class="vu-wrap"><div class="vu-bar"><div id="vuFill"></div></div></div>
     </main>
 
+    <div id="processingNotice" class="processing-notice hidden">
+      <p id="exportStatus" class="export-status" role="status" aria-live="polite"></p>
+      <button id="btnCancelProcess" type="button" class="icon-btn hidden">Oprește prelucrarea</button>
+    </div>
+    <div id="rescuePanel" class="rescue-panel hidden" role="alert">
+      <p>Filmarea nu a putut fi salvată în Arhivă. Descarc-o înainte să închizi aplicația.</p>
+      <button id="btnRescue" type="button" class="icon-btn">Descarcă filmarea originală</button>
+    </div>
+
     <section id="controlPanel" class="controls">
       <div class="row-btns">
         <button id="btnGrid" class="pill">▦ Grid</button>
@@ -51,7 +60,8 @@
         <button id="btnSiteMinus" class="pill" type="button">− Mic</button>
         <button id="btnSitePlus" class="pill" type="button">＋ Mare</button>
       </div>
-      <p id="exportStatus" class="export-status hidden" role="status" aria-live="polite"></p>
+      <label class="subtitle-option"><input id="chkSubtitles" type="checkbox" checked /> Subtitrare automată · Română</label>
+      <p class="subtitle-help">După Stop, vocea se transformă în text pe videoclip. Prima utilizare descarcă aproximativ 820 MB; folosește Wi-Fi. Procesarea are loc pe acest dispozitiv și poate dura. Păstrează aplicația deschisă.</p>
       <div class="sliders">
         <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
         <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
@@ -72,8 +82,12 @@
     <div id="clipList" class="clip-list"></div>
   </aside>
 
-  <script src="overlay-utils.js?v=3"></script>
-  <script src="media-utils.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="overlay-utils.js?v=4"></script>
+  <script src="media-utils.js?v=4"></script>
+  <script src="subtitle-utils.js?v=4"></script>
+  <script src="media-processor.js?v=4"></script>
+  <script src="speech-recognizer.js?v=4"></script>
+  <script src="recording-pipeline.js?v=4"></script>
+  <script src="app.js?v=4"></script>
 </body>
 </html>
