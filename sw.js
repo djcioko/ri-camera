@@ -1,13 +1,13 @@
-const CACHE_NAME = "ri-camera-shell-v6";
+const CACHE_NAME = "ri-camera-shell-v7";
 
 self.addEventListener("install", (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((c) =>
       c.addAll([
-        "./", "./index.html", "./styles.css?v=6", "./overlay-utils.js?v=6",
-        "./media-utils.js?v=6", "./subtitle-utils.js?v=6", "./media-processor.js?v=6",
-        "./speech-recognizer.js?v=6", "./server-subtitle-client.js?v=6",
-        "./server-subtitle-pipeline.js?v=6", "./subtitle-module.js?v=6", "./recording-pipeline.js?v=6", "./app.js?v=6",
+        "./", "./index.html", "./styles.css?v=7", "./overlay-utils.js?v=7",
+        "./media-utils.js?v=7", "./subtitle-utils.js?v=7", "./media-processor.js?v=7",
+        "./speech-recognizer.js?v=7", "./server-subtitle-client.js?v=7",
+        "./server-subtitle-pipeline.js?v=7", "./subtitle-module.js?v=7", "./recording-pipeline.js?v=7", "./app.js?v=7",
         "./subtitle-worker.js", "./vendor/ffmpeg/ffmpeg.js", "./vendor/ffmpeg/814.ffmpeg.js",
         "./assets/subtitles-font.ttf", "./manifest.json", "./assets/logo.png", "./assets/site.png"
       ])

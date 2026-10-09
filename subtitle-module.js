@@ -22,8 +22,8 @@
   function createModule(dependencies) {
     const { document, getClips, process, isBusy = () => false, onOpen = () => {} } = dependencies;
     const find = id => document.getElementById(id);
-    const panel = find('subtitlePanel'), fileInput = find('subtitleFile'), archive = find('subtitleArchive'), codeInput = find('subtitleAccessCode'), button = find('btnServerSubtitle'), status = find('subtitleModuleStatus');
-    let accessCode = '', selectedFile = null, clips = [], renderGeneration = 0;
+    const panel = find('subtitlePanel'), fileInput = find('subtitleFile'), archive = find('subtitleArchive'), button = find('btnServerSubtitle'), status = find('subtitleModuleStatus');
+    let selectedFile = null, clips = [], renderGeneration = 0;
     const say = message => { if (status) status.textContent = message; };
     if (fileInput) fileInput.onchange = () => {
       selectedFile = fileInput.files && fileInput.files[0] || null;
@@ -31,7 +31,6 @@
       say(selectedFile ? 'Selectat: ' + selectedFile.name + '. Fișierul nu a fost trimis. Apasă Subtitrează pe server pentru salvare și transfer.' : 'Alege un videoclip sau un original din Arhivă.');
     };
     if (archive) archive.onchange = () => { selectedFile = null; if (fileInput) fileInput.value = ''; say('Originalul selectat nu a fost trimis. Apasă Subtitrează pe server.'); };
-    if (codeInput) codeInput.oninput = () => { accessCode = codeInput.value.trim(); };
     async function refresh() {
       if (!archive) return;
       const generation = ++renderGeneration;
@@ -47,7 +46,6 @@
     }
     if (button) button.onclick = async () => {
       if (isBusy()) { say('Așteaptă finalizarea filmării sau a lucrării curente.'); return; }
-      if (!accessCode) { say('Introdu codul privat de acces pentru ai.djshopitalia.it.'); return; }
       let clip;
       if (selectedFile) {
         if (!selectedFile.size || selectedFile.size > 512 * 1024 * 1024) { say('Alege un fișier video de maximum 512 MB.'); return; }
@@ -60,8 +58,6 @@
       finally { button.disabled = false; }
     };
     return {
-      getAccessCode: () => accessCode,
-      setAccessCode: value => { accessCode = String(value || '').trim(); if (codeInput) codeInput.value = accessCode; },
       refresh,
       show: async () => { if (panel) panel.classList.toggle('hidden',false); onOpen(); await refresh(); },
       hide: () => { if (panel) panel.classList.toggle('hidden',true); },

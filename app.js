@@ -26,13 +26,11 @@ let wakeLock = null;
 let emergencyClip = null;
 const chkSubtitles = document.getElementById("chkSubtitles");
 const processorSelect = document.getElementById("subtitleProcessor");
-const cameraAccessCode = document.getElementById("cameraAccessCode");
 let subtitleModule = null;
 let userCancelledProcessing = false;
 let cameraGeneration = 0;
 function subtitleRoute() { return !!(window.location && window.location.hash === "#subtitrari"); }
 function currentProcessor() { return processorSelect && processorSelect.value === "server" ? "server" : "device"; }
-function accessCode() { return (subtitleModule && subtitleModule.getAccessCode()) || (cameraAccessCode && cameraAccessCode.value.trim()) || ""; }
 
 // Încărcare imagini din folderul assets
 const logoImg = new Image();
@@ -346,7 +344,7 @@ function pipelineDependencies() {
     persist: persistClip,
     patchRemote: patchRemoteClip,
     serverPipeline: window.RIServerSubtitlePipeline,
-    client: window.RIServerSubtitleClient ? RIServerSubtitleClient.createClient({ getAccessCode: accessCode }) : null,
+    client: window.RIServerSubtitleClient ? RIServerSubtitleClient.createClient() : null,
     isUserCancellation: () => userCancelledProcessing,
     media: RIMediaProcessor,
     speech: RISpeechRecognizer,
@@ -379,7 +377,6 @@ async function processArchivedClip(clip, forceServer = false) {
   try {
     beginProcessing();
     clip = { ...clip, subtitleProcessor: forceServer ? "server" : (clip.subtitleProcessor || currentProcessor()) };
-    if (clip.subtitleProcessor === "server" && !accessCode()) throw new Error("Introdu codul privat în modulul Subtitrări.");
     if (clip.subtitleProcessor === "server" && clip.remoteJob && ["cancelled", "failed", "expired", "cleaned"].includes(clip.remoteJob.status)) clip = { ...clip, remoteJob: undefined };
     if (clip.subtitleProcessor !== "server" && !(clip.width > 0 && clip.height > 0)) {
       setExportStatus("Se citește dimensiunea filmării…");
@@ -869,14 +866,12 @@ if (processorSelect) {
   const updateProcessorDescription = () => {
     const description = document.getElementById("processorDescription");
     if (description) description.textContent = currentProcessor() === "server"
-      ? "Cu subtitrarea activă, originalul se trimite către ai.djshopitalia.it. Modelul vocal și conversia rulează pe server. Cu subtitrarea oprită se salvează numai originalul. Introdu codul privat de acces mai jos."
+      ? "Cu subtitrarea activă, originalul se trimite către ai.djshopitalia.it. Modelul vocal și conversia rulează pe server. Cu subtitrarea oprită se salvează numai originalul."
       : "Procesare pe acest dispozitiv. Prima utilizare descarcă aproximativ 820 MB; folosește Wi-Fi. Păstrează aplicația deschisă.";
-    if (cameraAccessCode) cameraAccessCode.classList.toggle("hidden", currentProcessor() !== "server");
   };
   processorSelect.onchange = () => { localStorage.setItem("ri_subtitle_processor", currentProcessor()); updateProcessorDescription(); };
   updateProcessorDescription();
 }
-if (cameraAccessCode) cameraAccessCode.oninput = () => { if (subtitleModule) subtitleModule.setAccessCode(cameraAccessCode.value); };
 
 (async () => {
   updateBusyUi();
