@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import pwd
+import resource
 import secrets
 import shutil
 import socket
@@ -30,6 +31,40 @@ MODEL = Path("/var/lib/ri-subtitles-model") / MODEL_REVISION
 MARKER = CONFIG / "installation.json"
 SERVICE = Path("/etc/systemd/system/ri-subtitles.service")
 SOCKET = Path("/etc/systemd/system/ri-subtitles.socket")
+PROBE_MAX_BYTES = 65536
+
+
+class ProbeError(PreflightError):
+    def __init__(self, message, *, retryable=True):
+        super().__init__(message)
+        self.retryable = retryable
+
+
+def probe_metadata(phase, status, content_type, size, curl_exit=None):
+    mime = (content_type or "").split(";", 1)[0].strip().lower()
+    # Print known media types only, never arbitrary response header contents.
+    safe_type = mime if mime in {"application/json", "text/html", "text/plain", "application/octet-stream"} else ("other" if mime else "none")
+    suffix = f" curl={curl_exit}" if curl_exit is not None else ""
+    return f"{phase}: HTTP={status} type={safe_type} bytes={size}{suffix}"
+
+
+def decode_probe(body, status, content_type, phase, *, expected_status=None, require_ready=False, curl_exit=None):
+    detail = probe_metadata(phase, status, content_type, len(body), curl_exit)
+    if len(body) > PROBE_MAX_BYTES:
+        raise ProbeError(f"{detail}; răspuns prea mare.")
+    if expected_status is not None and status != expected_status:
+        raise ProbeError(f"{detail}; status HTTP neașteptat (așteptat {expected_status}).")
+    if (content_type or "").split(";", 1)[0].strip().lower() != "application/json":
+        raise ProbeError(f"{detail}; tipul răspunsului nu este JSON.")
+    try:
+        value = json.loads(body)
+    except (ValueError, UnicodeError):
+        raise ProbeError(f"{detail}; corp JSON invalid.") from None
+    if not isinstance(value, dict):
+        raise ProbeError(f"{detail}; este necesar un obiect JSON.")
+    if require_ready and value.get("ready") is not True:
+        raise ProbeError(f"{detail}; ready nu este true.")
+    return value
 
 
 def atomic_write(path, data, mode=0o644):
@@ -61,33 +96,35 @@ def state(unit, action):
                           stderr=subprocess.DEVNULL).returncode == 0
 
 
-def uds_request(method, path, code=None):
+def uds_request(method, path, code=None, *, phase="UDS", expected_status=None, require_ready=False):
     connection = http.client.HTTPConnection("localhost", timeout=5)
-    connection.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    connection.sock.settimeout(5)
-    connection.sock.connect("/run/ri-subtitles/api.sock")
     try:
+        connection.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        connection.sock.settimeout(5)
+        connection.sock.connect("/run/ri-subtitles/api.sock")
         connection.request(method, path, headers={"Authorization": "Bearer " + code} if code else {})
         response = connection.getresponse()
-        body = response.read(65537)
-        if len(body) > 65536:
-            raise PreflightError("Răspuns de verificare neașteptat de mare.")
-        return response.status, json.loads(body)
+        body = response.read(PROBE_MAX_BYTES + 1)
+        return response.status, decode_probe(body, response.status, response.getheader("Content-Type"), phase,
+                                            expected_status=expected_status, require_ready=require_ready)
+    except (OSError, http.client.HTTPException):
+        raise ProbeError(f"{phase}: HTTP=0 type=none bytes=0; comunicarea pe socket a eșuat.") from None
     finally:
         connection.close()
 
 
 def wait_ready():
+    print("Verificare: UDS health.", flush=True)
     deadline = time.monotonic() + 40
+    last = "UDS health: încă nu există un răspuns."
     while time.monotonic() < deadline:
         try:
-            status, health = uds_request("GET", "/v1/health")
-            if status == 200 and health.get("ready") is True:
-                return
-        except (OSError, ValueError, http.client.HTTPException):
-            pass
+            uds_request("GET", "/v1/health", phase="UDS health", expected_status=200, require_ready=True)
+            return
+        except PreflightError as error:
+            last = str(error)
         time.sleep(0.5)
-    raise PreflightError("Serviciul nu a confirmat readiness pe socket în 40 secunde.")
+    raise PreflightError(f"Serviciul nu a confirmat readiness pe socket în 40 secunde. {last}")
 
 
 def read_marker_for_host(host):
@@ -98,14 +135,59 @@ def read_marker_for_host(host):
     return previous
 
 
+def limit_probe_files():
+    # Child-only cap also covers chunked replies with older curl versions.
+    _, hard = resource.getrlimit(resource.RLIMIT_FSIZE)
+    limit = PROBE_MAX_BYTES + 1 if hard == resource.RLIM_INFINITY else min(PROBE_MAX_BYTES + 1, hard)
+    resource.setrlimit(resource.RLIMIT_FSIZE, (limit, limit))
+
+
+def https_probe(url, options, phase, timeout):
+    with tempfile.TemporaryDirectory(prefix="ri-subtitles-probe-") as temporary:
+        output = Path(temporary) / "body"
+        command = ["curl", "--disable", "--silent", "--show-error", "--max-time", str(timeout),
+                   "--max-filesize", str(PROBE_MAX_BYTES), "--output", str(output),
+                   "--write-out", "%{http_code}\n%{content_type}\n"] + options + [url]
+        try:
+            result = subprocess.run(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                    timeout=timeout + 1, preexec_fn=limit_probe_files)
+        except subprocess.TimeoutExpired:
+            raise ProbeError(f"{phase}: HTTP=0 type=none bytes=0 curl=timeout.") from None
+        except OSError:
+            raise ProbeError(f"{phase}: HTTP=0 type=none bytes=0 curl=unavailable.", retryable=False) from None
+        metadata = result.stdout.splitlines()
+        status = int(metadata[0]) if metadata and len(metadata[0]) == 3 and metadata[0].isdigit() else 0
+        content_type = metadata[1] if len(metadata) > 1 else ""
+        body = b""
+        if output.is_file():
+            with output.open("rb") as handle:
+                body = handle.read(PROBE_MAX_BYTES + 1)
+        if result.returncode:
+            detail = probe_metadata(phase, status, content_type, len(body), result.returncode)
+            raise ProbeError(f"{detail}; cererea curl a eșuat.", retryable=result.returncode not in {2, 3, 35, 51, 58, 60, 77, 82, 83, 90, 91})
+        return decode_probe(body, status, content_type, phase, expected_status=200, require_ready=True, curl_exit=0)
+
+
 def verify_https(host):
     host = validate_host(host)
     url = f"https://{host}/api/ri-subtitles/v1/health"
-    common = ["curl", "--fail", "--silent", "--show-error", "--max-time", "15"]
-    for label, options in (("locală", ["--noproxy", "*", "--resolve", f"{host}:443:127.0.0.1"]), ("publică", [])):
-        health = json.loads(run(common + options + [url], timeout=20))
-        if health.get("ready") is not True:
-            raise PreflightError(f"Ruta HTTPS {label} nu confirmă readiness.")
+    for phase, options in (("HTTPS local", ["--noproxy", "*", "--resolve", f"{host}:443:127.0.0.1"]), ("HTTPS public", [])):
+        print(f"Verificare: {phase}.", flush=True)
+        deadline = time.monotonic() + 20
+        last = f"{phase}: încă nu există un răspuns."
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                https_probe(url, options, phase, min(5, remaining))
+                break
+            except ProbeError as error:
+                last = str(error)
+                if not error.retryable:
+                    raise
+            if (remaining := deadline - time.monotonic()) > 0:
+                time.sleep(min(0.5, remaining))
+        else:
+            raise PreflightError(f"{phase} nu confirmă readiness în 20 secunde. {last}")
 
 
 def create_release(source):
@@ -255,8 +337,10 @@ def install(source, host=DEFAULT_HOST):
         run(["systemctl", "start", "ri-subtitles.socket"])
         run(["systemctl", "restart", "ri-subtitles.service"])
         wait_ready()
-        if uds_request("GET", "/v1/jobs/" + "0" * 32)[0] != 401 or uds_request("GET", "/v1/jobs/" + "0" * 32, code)[0] != 404:
-            raise PreflightError("Verificarea autentificării API a eșuat.")
+        print("Verificare: UDS auth fără cod (401).", flush=True)
+        uds_request("GET", "/v1/jobs/" + "0" * 32, phase="UDS auth fără cod", expected_status=401)
+        print("Verificare: UDS auth cu cod (404).", flush=True)
+        uds_request("GET", "/v1/jobs/" + "0" * 32, code, phase="UDS auth cu cod", expected_status=404)
         run(["systemctl", "reload", "nginx"])
         verify_https(host)
         if not state("ri-subtitles.service", "is-active") or not state("ri-subtitles.socket", "is-active"):

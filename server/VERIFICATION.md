@@ -73,7 +73,17 @@ Destinația selectată este `ai.djshopitalia.it`, pe VPS-ul OVH indicat de admin
 
 ## Ce trebuie verificat la activare
 
-Conexiunea SSH către OVH a fost blocată de rețeaua mediului înainte de autentificare. Nu s-au instalat servicii, nu s-a modificat Nginx și nu s-a publicat o rută API pe OVH din această sesiune. Verificarea resurselor și lista domeniilor provin din rezultatul terminalului furnizat de administrator; instalatorul trebuie încă executat pe acel server.
+### Corecția verificării răspunsurilor la activare
+
+Prima încercare pe OVH a confirmat verificarea modelului, apoi a raportat o eroare `JSONDecodeError` și restaurarea configurațiilor anterioare. Ieșirea veche nu identifica verificarea care primise răspunsul, deci cauza exactă de pe VPS nu poate fi stabilită numai din acel mesaj.
+
+Reproducerea locală a confirmat că răspunsurile normale ale API-ului sunt JSON: health 200, cerere fără cod 401 și lucrare absentă cu cod valid 404. Verificatorul HTTPS vechi reproduce exact eroarea raportată când primește HTML 200, HTML 301 sau un corp gol, chiar dacă următorul răspuns ar confirma readiness. [Nginx aplică configurația prin pornirea unor workeri noi la reload](https://nginx.org/en/docs/control.html); un răspuns tranzitoriu este o ipoteză plauzibilă, dar nu este dovedit drept cauza încercării OVH.
+
+Corecția verifică statutul HTTP și forma răspunsului, adaugă diagnostice pentru fiecare etapă și așteaptă limitat disponibilitatea HTTPS. Redirecționările nu sunt urmate, verificarea certificatelor rămâne activă, iar HTML sau un JSON fără readiness nu pot produce succes. Corpul răspunsurilor și credențialele nu sunt incluse în diagnostice. Probele locale/publice și restaurarea configurațiilor la eșec rămân obligatorii.
+
+**Verificarea corecției: 74 teste Python trecute, inclusiv 17 pentru instalare.** Cazurile noi reproduc HTML/redirecționare urmate de readiness, răspunsuri permanent greșite, eroare TLS, eroare JSON la autentificarea pe socket și păstrarea ultimului diagnostic la timeout. Un proces copil real a confirmat limita de scriere a răspunsului, fără schimbarea limitelor procesului părinte. Revizuirea independentă finală nu a identificat un blocaj rămas. Interfața nu s-a schimbat în această corecție; rezultatul anterior de 78 teste JavaScript rămâne valabil pentru aceleași fișiere.
+
+Conexiunea SSH a mediului către OVH a fost blocată înainte de autentificare. Administratorul a executat instalatorul în propriul terminal: modelul a fost verificat, iar ultima activare a raportat restaurarea configurațiilor după eșec. Backend-ul nu este încă confirmat activ. Verificarea resurselor și lista domeniilor provin din rezultatul terminalului furnizat de administrator; corecția trebuie rulată și verificată pe acel server.
 
 Mediul local a permis testarea HTTP prin TCP loopback, dar a refuzat crearea socketurilor AF_UNIX. Configurația de producție folosește socket UNIX; proprietatea și accesul Nginx la el sunt verificate de instalator pe serverul real. Verificarea systemd locală validează șabloanele, fără a porni un serviciu.
 

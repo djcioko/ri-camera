@@ -1,9 +1,13 @@
 import importlib.util
 import inspect
+import itertools
 import json
 from pathlib import Path
+import resource
+import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -117,6 +121,16 @@ server { listen 443 ssl; server_name djcioko.ro; }
 
 
 class DeploymentHostTests(unittest.TestCase):
+    def curl_responses(self, replies):
+        calls = []
+        pending = list(replies)
+        def respond(argv, **kwargs):
+            calls.append(argv)
+            status, mime, body, code = pending.pop(0) if len(pending) > 1 else pending[0]
+            Path(argv[argv.index("--output") + 1]).write_bytes(body)
+            return SimpleNamespace(returncode=code, stdout=f"{status:03d}\n{mime}\n", stderr="PRIVATE_RESPONSE_DETAILS")
+        return calls, respond
+
     def test_changed_or_legacy_marker_host_stops_before_installation_mutations(self):
         self.assertIn("host", inspect.signature(installer.install).parameters)
         with tempfile.TemporaryDirectory() as directory:
@@ -134,23 +148,82 @@ class DeploymentHostTests(unittest.TestCase):
                 self.assertEqual(list(Path(directory).iterdir()), [marker])
 
     def test_https_verification_checks_local_vhost_then_public_endpoint(self):
-        self.assertTrue(hasattr(installer, "verify_https"))
-        calls = []
-        def respond(argv, **kwargs):
-            calls.append(argv)
-            return '{"ready": true}'
-        with patch.object(installer, "run", side_effect=respond):
+        calls, respond = self.curl_responses([(200, "application/json", b'{"ready": true}', 0)])
+        with patch.object(installer.subprocess, "run", side_effect=respond):
             installer.verify_https("ai.djshopitalia.it")
         self.assertEqual(len(calls), 2)
         self.assertIn("ai.djshopitalia.it:443:127.0.0.1", calls[0])
         self.assertIn("--resolve", calls[0])
         self.assertNotIn("--resolve", calls[1])
         for call in calls:
+            self.assertEqual(call[:2], ["curl", "--disable"])
             self.assertEqual(call[-1], "https://ai.djshopitalia.it/api/ri-subtitles/v1/health")
             self.assertNotIn("--insecure", call)
-        with patch.object(installer, "run", return_value='{"ready": false}'):
-            with self.assertRaises(preflight.PreflightError):
+            self.assertNotIn("--location", call)
+            self.assertNotIn("--fail", call)
+            self.assertIn("--max-filesize", call)
+
+    def test_probe_file_cap_is_enforced_in_child_without_changing_parent(self):
+        self.assertTrue(hasattr(installer, "limit_probe_files"))
+        before = resource.getrlimit(resource.RLIMIT_FSIZE)
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "too-large"
+            result = subprocess.run([sys.executable, "-B", "-c", "import sys; open(sys.argv[1], 'wb').write(b'x' * 131074)", str(target)],
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, preexec_fn=installer.limit_probe_files)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertLessEqual(target.stat().st_size, installer.PROBE_MAX_BYTES + 1)
+        self.assertEqual(resource.getrlimit(resource.RLIMIT_FSIZE), before)
+
+    def test_https_retries_html_and_redirect_until_strict_json_readiness(self):
+        calls, respond = self.curl_responses([
+            (200, "text/html", b"<html>old application</html>", 0),
+            (301, "text/html", b"redirect", 0),
+            (200, "application/json; charset=utf-8", b'{"ready": true}', 0),
+        ])
+        with patch.object(installer.subprocess, "run", side_effect=respond), patch.object(installer.time, "sleep"), patch.object(installer.time, "monotonic", side_effect=itertools.count().__next__):
+            installer.verify_https("ai.djshopitalia.it")
+        self.assertEqual(len(calls), 4)
+
+    def test_permanent_bad_https_response_reports_metadata_without_response_content(self):
+        for status, mime, body in ((200, "text/html", b"PRIVATE_BODY"), (301, "text/html", b""), (200, "application/json", b"[]"), (200, "application/json", b'"PRIVATE_BODY"'), (200, "application/json", b'{"ready": 1}'), (200, "application/json", b'{"ready": false}')):
+            calls, respond = self.curl_responses([(status, mime, body, 0)])
+            with self.subTest(body=body), patch.object(installer.subprocess, "run", side_effect=respond), patch.object(installer.time, "sleep"), patch.object(installer.time, "monotonic", side_effect=itertools.count().__next__):
+                with self.assertRaises(preflight.PreflightError) as caught:
+                    installer.verify_https("ai.djshopitalia.it")
+            message = str(caught.exception)
+            for expected in ("HTTPS local", f"HTTP={status}", f"type={mime}", f"bytes={len(body)}", "curl=0"):
+                self.assertIn(expected, message)
+            self.assertNotIn("PRIVATE_BODY", message)
+            self.assertNotIn("PRIVATE_RESPONSE_DETAILS", message)
+            self.assertGreater(len(calls), 1)
+
+    def test_tls_failure_reports_exit_code_without_retries_or_stderr(self):
+        calls, respond = self.curl_responses([(0, "", b"", 60)])
+        with patch.object(installer.subprocess, "run", side_effect=respond):
+            with self.assertRaises(preflight.PreflightError) as caught:
                 installer.verify_https("ai.djshopitalia.it")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("curl=60", str(caught.exception))
+        self.assertNotIn("PRIVATE_RESPONSE_DETAILS", str(caught.exception))
+
+    def test_invalid_uds_auth_json_reports_safe_phase_status_type_and_size(self):
+        response = SimpleNamespace(status=401, getheader=lambda name, default=None: "application/json", read=lambda count: b"PRIVATE_BODY")
+        with patch.object(installer.http.client, "HTTPConnection") as connection, patch.object(installer.socket, "socket"):
+            connection.return_value.getresponse.return_value = response
+            with self.assertRaises(preflight.PreflightError) as caught:
+                installer.uds_request("GET", "/v1/jobs/" + "0" * 32, "PRIVATE_ACCESS_CODE", phase="UDS auth", expected_status=401)
+        message = str(caught.exception)
+        for expected in ("UDS auth", "HTTP=401", "type=application/json", "bytes=12"):
+            self.assertIn(expected, message)
+        self.assertNotIn("PRIVATE_BODY", message)
+        self.assertNotIn("PRIVATE_ACCESS_CODE", message)
+
+    def test_uds_health_timeout_keeps_last_safe_failure_context(self):
+        error = preflight.PreflightError("UDS health: HTTP=200 type=text/html bytes=7")
+        with patch.object(installer, "uds_request", side_effect=error), patch.object(installer.time, "sleep"), patch.object(installer.time, "monotonic", side_effect=itertools.count().__next__):
+            with self.assertRaises(preflight.PreflightError) as caught:
+                installer.wait_ready()
+        self.assertIn("HTTP=200 type=text/html bytes=7", str(caught.exception))
 
     def test_ffmpeg_n_prefix_is_accepted_without_accepting_old_versions(self):
         self.assertTrue(hasattr(preflight, "validate_ffmpeg_version"))

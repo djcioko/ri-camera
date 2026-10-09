@@ -66,6 +66,12 @@ Fișierele existente care urmează să fie modificate se salvează cu dată înt
 
 La succes, scriptul imprimă revizia, directorul de backup și confirmarea verificării prin socket și HTTPS. Păstrați acest rezultat ca dovadă a activării. O verificare locală a codului sau un PR creat nu înlocuiește acest rezultat.
 
+### Reluare după un răspuns ne-JSON la activare
+
+O revizie anterioară putea afișa numai `Expecting value: line 1 column 1 (char 0)` dacă o verificare primea HTML, o redirecționare sau un corp gol. Verificatorul raportează acum etapa (socket, autentificare, HTTPS local sau public), codul HTTP, tipul răspunsului și dimensiunea, fără a imprima corpul răspunsului sau codul privat. Verificarea HTTPS așteaptă un interval limitat după reload și acceptă numai HTTP 200 cu un obiect JSON care confirmă `ready: true`. O rută care rămâne greșită provoacă în continuare oprirea și restaurarea configurațiilor.
+
+Reluarea se face din noua revizie exactă indicată în PR, cu aceleași comenzi de instalare. Modelul existent este reverificat și refolosit; nu se șterg modelul, release-urile sau backupurile pentru a relua.
+
 ### Codul privat
 
 Codul este generat aleator pe VPS și păstrat în `/etc/ri-subtitles/service.env`, cu acces doar root. Pentru a-l vedea **doar în terminalul propriu**, administratorul poate rula:
