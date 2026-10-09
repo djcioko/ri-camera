@@ -1,40 +1,84 @@
-# R&I Camera — aplicație filmare șantier
+# R&I Camera — filmare cu subtitrări automate în română
 
-Aplicație web (PWA) pentru videograful R&I Grupul de Firme.
+Aplicație web instalabilă (PWA) pentru filmări de șantier, cu camera și microfonul telefonului sau laptopului.
 
-## Ce face acum (situația 1)
+## Ce include
 
-- Cameră spate / față, buton pe ecran
-- 3 reglaje: lumină, contrast, saturație + zoom
-- Indicator volum (VU) pe ecran
-- Logo R&I și numărul **0727.300.302** sunt puse automat pe fiecare cadru filmat
-- Înregistrările rămân în aplicație (IndexedDB pe telefon)
-- Acasă: Salvează pe telefon / laptop din bibliotecă
-- Bot editor (versiune 1): descarcă un fișier montaj din toate clipurile
+- Cameră spate/față, reglaje de lumină și contrast, monitor de volum.
+- Logo R&I, site, dată și nume șantier înregistrate direct în imagine. Poziția și dimensiunea imaginilor PNG se pot modifica.
+- **Subtitrare automată în română după Stop**, activată implicit și cu preferința salvată pe dispozitiv.
+- **MP4 cu textul inclus în imagine**, alb cu contur închis, centrat deasupra zonei pentru dată/șantier, cu diacritice românești.
+- Fișier **SRT** separat cu textul și timpii subtitrării.
+- Filmarea originală și rezultatul subtitrat păstrate separat în Arhivă (IndexedDB).
+- Progres, oprirea prelucrării și reluare din Arhivă. Dacă textul a fost deja calculat, o reluare după un export nereușit refolosește acei timpi.
 
 ## Cum o folosești
 
-1. Pune folderul pe GitHub Pages (sau orice hosting HTTPS).
-2. Deschide site-ul pe telefon.
-3. Acceptă camera + microfon.
-4. Opțional: „Adaugă pe ecranul principal” ca să meargă ca aplicație.
+1. Deschide aplicația prin HTTPS și permite accesul la cameră și microfon.
+2. Verifică bifa **Subtitrare automată · Română**.
+3. Filmează, apoi apasă **Stop**. Aplicația salvează întâi originalul, apoi transcrie vocea și pregătește MP4-ul subtitrat.
+4. Lasă aplicația deschisă până apare mesajul că MP4-ul este pregătit. Ecranul este menținut activ dacă browserul permite.
+5. Deschide **Arhivă** și alege **MP4 subtitrat**, **Original** sau **Text SRT**.
 
-**Important:** browserul cere HTTPS pentru cameră (GitHub Pages e OK).
+Poți opri prelucrarea fără să pierzi originalul deja salvat. În Arhivă apare **Reia subtitrarea RO**. Clipurile mai vechi au butonul **Adaugă subtitrare RO**. Dacă oprești subtitrarea din bifă, înregistrarea rămâne disponibilă normal.
 
-## GitHub Pages (rapid)
+Dacă stocarea locală este plină sau indisponibilă, aplicația oferă un buton separat pentru descărcarea imediată a originalului. Descarcă fișierul înainte să închizi pagina. Arhiva browserului poate fi ștearsă de utilizator sau de sistem; descarcă filmările pe care dorești să le păstrezi.
+
+## Voce, limbă și performanță
+
+Funcția transcrie **vorbirea în română**. Nu este un serviciu de traducere din alte limbi. Primește pista microfonului folosit la filmare; nu identifică automat persoana care vorbește și nu separă prezentatorul de alte voci captate de același microfon. Pentru subtitrarea prezentatorului, folosește un microfon apropiat de acesta.
+
+Înregistrările audio/video nu sunt încărcate pe un serviciu de transcriere. Recunoașterea vocală și exportul rulează local, în Web Workers. Nu sunt necesare conturi, chei API sau plăți pe filmare. La prima folosire se descarcă **aproximativ 820 MB**: circa 759 MB pentru model și restul pentru motoarele și fișierele de procesare. Folosește Wi-Fi pentru prima descărcare. Modelul și motorul video sunt păstrate în cache când browserul și spațiul disponibil permit. După ștergerea cache-ului este necesară o nouă descărcare.
+
+Procesarea pe telefon poate dura, în special pentru clipuri lungi sau rezoluții mari. Aplicația eliberează motorul video înainte de transcriere și modelul vocal înainte de export, pentru a reduce memoria folosită simultan. Păstrează pagina în prim-plan. Verifică textul rezultat, mai ales la nume proprii, termeni tehnici, zgomot puternic sau voci suprapuse; recunoașterea automată poate greși.
+
+## Publicare sau actualizare
+
+Aplicația este statică: nu are nevoie de un backend, de un pas de build sau de configurarea unui serviciu cloud.
+
+1. Publică **întregul conținut al folderului aplicației**, inclusiv `vendor/ffmpeg/`, fontul din `assets/` și noile fișiere JavaScript, în rădăcina proiectului `djcioko/ri-camera` sau pe un hosting HTTPS.
+2. Pe GitHub Pages, configurația obișnuită este **Deploy from a branch → main → / (root)**. Publicarea necesită acces de scriere la acel repository.
+3. Pentru o aplicație deja instalată, închide toate ferestrele ei și redeschide-o după actualizare, astfel încât noul service worker să se activeze. Nu este necesară ștergerea Arhivei.
+
+Service worker-ul folosește un cache nou pentru interfață și păstrează separat cache-urile modelelor și motorului video. Aplicația funcționează și dintr-un subdirector, de exemplu cel al unui proiect GitHub Pages. Nu folosi `file://`: camera și modulele de procesare necesită un context web sigur.
+
+## Structura implementării
+
+| Fișier | Rol |
+| --- | --- |
+| `app.js` | Cameră, captură, salvare în Arhivă, progres, anulare, reîncercare și descărcări |
+| `recording-pipeline.js` | Salvarea originalului înainte de procesare și stările persistente ale fiecărui clip |
+| `speech-recognizer.js` | Interfața cu worker-ul de recunoaștere, anulare, verificarea tăcerii și termen-limită |
+| `subtitle-worker.js` | Modelul Whisper multilingv, versiunile fixate și transcrierea în română |
+| `subtitle-utils.js` | Intervale valide, împărțirea textului în subtitrări și export SRT/WebVTT/ASS |
+| `media-processor.js` | PCM mono la 16 kHz, font, libass și MP4 H.264/AAC prin FFmpeg WASM |
+| `vendor/ffmpeg/` | Wrapper și worker FFmpeg de aceeași origine, licențe și proveniență |
+| `sw.js` | Cache-ul interfeței PWA și actualizări fără ștergerea modelelor |
+
+Se folosește motorul FFmpeg single-thread pentru a funcționa pe hosting static fără cerința `SharedArrayBuffer`/COOP/COEP. Versiunile FFmpeg și proveniența fișierelor sunt documentate în [vendor/ffmpeg/NOTICE.md](vendor/ffmpeg/NOTICE.md). Modelul vocal este `onnx-community/whisper-large-v3-turbo_timestamped` (multilingv, q4), la revizia `b3f77bf9a8c4d5ea3415827033d1ffea7955fd9a`. Runtime-ul este Transformers.js **4.3.1**. Versiunile sunt fixate explicit în `subtitle-worker.js`; această versiune include corecțiile Whisper pentru timpii pe cuvinte descrise în [PR #1594](https://github.com/huggingface/transformers.js/pull/1594).
+
+Modelul mai mare a fost ales după teste cu voce umană în română: variantele generice Base și Small au produs prea multe greșeli pentru subtitrare utilă. Compromisul este descărcarea mai mare și procesarea mai lentă. Nu există promisiunea unei transcrieri perfecte sau a unei viteze fixe pe telefon.
+
+Ca reper, în browserul desktop de test, o probă audio de 7,02 secunde a necesitat aproximativ 150 de secunde pentru descărcarea inițială, inițializarea modelului și transcriere. O a doua probă de 6,24 secunde, cu modelul deja în cache, a necesitat aproximativ 104 secunde pentru inițializare și transcriere. Acestea sunt două măsurători ale testelor, fără exportul video; nu sunt un benchmark general și nu trebuie extrapolate liniar la clipuri lungi sau la un anumit telefon.
+
+Surse ale dependențelor: [Whisper](https://github.com/openai/whisper), [Transformers.js](https://huggingface.co/docs/transformers.js), [ffmpeg.wasm](https://ffmpegwasm.netlify.app/docs/getting-started/usage/), [DejaVu Fonts](https://dejavu-fonts.github.io/).
+
+## Verificare
+
+Testele unitare și de regresie nu necesită servicii externe:
 
 ```bash
-cd ri-camera
-git init
-git add .
-git commit -m "R&I Camera v1"
-git branch -M main
-git remote add origin https://github.com/CONTUL_TAU/ri-camera.git
-git push -u origin main
+node --test tests/*.test.js
 ```
 
-Apoi: Settings → Pages → Deploy from branch `main` / root.
+Testul opțional de integrare necesită Playwright și Chromium:
 
-## Următorul pas (situația 2)
+```bash
+npm install --no-save playwright
+npx playwright install chromium
+node tests/browser-smoke.cjs
+```
 
-Bot editor real: tăiere silenzioasă, clipuri scurte, muzică, titluri, export MP4 cu ffmpeg.
+Poți seta `RI_CHROMIUM_EXECUTABLE` pentru un Chromium existent și `RI_QA_OUTPUT` pentru folderul de rezultate. Testul pornește un server temporar, o cameră sintetică și motorul FFmpeg real. Verifică înregistrarea, originalul salvat înainte de procesare, exportul cu subtitrare și audio, SRT, anularea și recuperarea după redeschidere. Implicit, transcriptul testului este controlat pentru a verifica determinist integrarea și randarea. Setează `RI_REAL_SPEECH_WAV` la calea unui WAV cu vorbire în română pentru a rula și modelul vocal real: testul introduce sunetul în fluxul de captură, înregistrează, transcrie și exportă automat după Stop. Acuratețea se evaluează comparând SRT-ul rezultat cu vorbirea din fișier; testul nu pretinde o transcriere perfectă.
+
+Păstrează testarea pe telefonul folosit efectiv înainte de utilizare pentru filmări importante. Un test într-un browser desktop nu certifică memoria disponibilă, comportamentul în fundal sau viteza unui anumit telefon.

@@ -62,6 +62,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 .controls {
   background: var(--panel); padding: 10px 12px 14px;
   border-top: 1px solid #222; transition: transform 0.2s ease; z-index: 20;
+  max-height: 50dvh; overflow-y: auto; flex-shrink: 0;
 }
 .controls.hidden-panel { display: none; }
 
@@ -111,3 +112,28 @@ input[type=range] { width: 100%; accent-color: var(--gold); }
 .clip-info .meta small { color: var(--muted); display: block; }
 .clip-actions { display: flex; gap: 8px; }
 .clip-actions button { flex: 1; padding: 6px; font-size: 12px; border-radius: 6px; }
+
+button:disabled { opacity: .45; cursor: not-allowed; }
+.top-meta { min-width: 0; }
+.stage { min-height: 110px; }
+.subtitle-option { display: flex; align-items: center; gap: 8px; color: var(--gold); font-size: 12px; font-weight: 600; }
+.subtitle-option input { width: 18px; height: 18px; accent-color: var(--gold); }
+.subtitle-help { font-size: 10px; line-height: 1.5; color: var(--muted); margin: 4px 0 10px; }
+.processing-notice { flex-shrink: 0; padding: 8px 12px; background: #171409; border-top: 1px solid #544715; text-align: center; }
+.processing-notice .export-status { margin: 0; border: none; padding: 0; background: transparent; }
+.processing-notice button { margin-top: 6px; font-size: 11px; }
+.rescue-panel { padding: 10px 12px; background: #502019; flex-shrink: 0; font-size: 12px; }
+.rescue-panel p { margin: 0 0 8px; }
+.clip-card .meta { overflow-wrap: anywhere; }
+.clip-actions { flex-wrap: wrap; }
+.clip-actions button { min-width: 120px; }
+.subtitle-status { margin: 0; color: var(--gold); font-size: 12px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
+.subtitle-status[data-state="ready"] { color: #55d69a; }
+.subtitle-status[data-state="failed"], .subtitle-status[data-state="interrupted"] { color: #ffba85; }
+.drawer-head { gap: 8px; }
+.drawer-head button { flex-shrink: 0; }
+@media (max-height: 520px) and (orientation: landscape) {
+  .controls { max-height: 40dvh; padding-top: 6px; }
+  .processing-notice { padding: 4px 10px; }
+  .processing-notice button { margin-top: 3px; }
+}
