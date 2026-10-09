@@ -7,7 +7,7 @@ Verificare locală: 9 octombrie 2026. Acest raport descrie codul și mediul de t
 | Verificare | Rezultat |
 | --- | --- |
 | Regresii JavaScript | 78 teste trecute, 0 eșuate, 0 omise |
-| API, coadă, media și instalare | 58 teste Python trecute |
+| API, coadă, media și instalare | 63 teste Python trecute, inclusiv 5 pentru alegerea runtime-ului |
 | Browser mobil simulat | Chromium, 390 × 844, IndexedDB real, flux complet al panoului |
 | Cameră pe ruta modulului | 0 solicitări de cameră/microfon |
 | Motoare locale în modul server | 0 invocări de ASR/FFmpeg în browser |
@@ -45,6 +45,21 @@ O probă anterioară cu aceeași voce într-un MP4 de 7,020 secunde a trecut de 
 4. **Anularea unui PUT blocat.** DELETE, expirarea și oprirea serviciului anulează și așteaptă închiderea receptorului de upload înainte de a confirma ștergerea. Reproducerea originală nu mai lasă descriptori de fișiere șterse deschiși sau spațiu necontabilizat.
 
 Toate cele patru reproduceri au trecut după corecții. Revizuirea finală nu a identificat un blocaj rămas în implementare.
+
+## Corecție pentru VPS-uri cu Python implicit mai vechi
+
+Lansatoarele inițiale alegeau `python3` fără să caute executabilele cu număr de versiune. După raportarea erorii de preflight, s-a adăugat selecția comună a unui CPython 3.12+ și pregătirea explicită, separată, prin `setup_python.sh`. Verificarea VPS rămâne fără instalări sau descărcări.
+
+Probe efective pe Linux x86_64 în mediul de test:
+
+- Căutarea găsește un Python 3.12 chiar dacă executabilul implicit este incompatibil. O alegere explicită invalidă este respinsă, iar lipsa runtime-ului indică scriptul de pregătire.
+- O bază Python aflată într-un director privat `0700` este respinsă înaintea instalării dependențelor. Acest defect a fost reprodus printr-un test eșuat înainte de corecție și trecut după corecție.
+- Bootstrap complet din arhiva reală CPython **3.12.15**, build **20261003**: descărcare, SHA-256, extragere, mutare în calea persistentă, importuri, creare de `venv` și pornirea `pip`.
+- Repetarea pregătirii a reutilizat runtime-ul fără descărcare. Fișierele sunt deținute de root, nu permit scriere altor utilizatori, iar directoarele permit traversarea de către serviciu. Legătura `/usr/bin/python3` a rămas identică.
+- O descărcare coruptă controlată a fost respinsă înainte de extragere; nu s-a publicat un interpreter și fișierele temporare au fost curățate.
+- Toate cele **63 de teste Python** au trecut folosind noul CPython 3.12.15 și pachetele fixate deja instalate în mediul de test. Separat, cele 32 de distribuții au fost importate și `WhisperModel` a încărcat modelul existent offline, CPU INT8, în 2,03 secunde. Nu s-au recompilat extensii și nu s-a reinstalat mediul Python al aplicațiilor existente.
+
+Revizuirea independentă finală nu a identificat alte defecte concrete în această corecție. Arhiva aarch64 este fixată prin metadatele oficiale și SHA-256; nu a fost executată pe hardware ARM. Mediul local nu permite schimbarea UID-ului pentru proba runtime-ului, astfel că verificarea cu utilizatorul real al serviciului rămâne obligatorie în instalator, pe VPS.
 
 ## Ce trebuie verificat la activare
 

@@ -36,18 +36,27 @@ Folosiți un checkout al **reviziei exacte revizuite în PR**. Comanda de livrar
 Din rădăcina checkout-ului:
 
 ```bash
+sudo bash server/scripts/setup_python.sh
 sudo bash server/scripts/inspect_vps.sh
 sudo bash server/deploy/install.sh
 ```
 
-Dacă Python 3.12 este instalat sub un nume separat, indicați executabilul existent:
+`setup_python.sh` caută întâi un CPython 3.12+ existent, cu `venv`, `ensurepip`, SSL și SQLite. Sunt recunoscute și executabilele `python3.12`, `python3.13` și `python3.14`, chiar dacă `python3` este mai vechi. Dacă nu există unul compatibil, pregătește **Python 3.12.15 separat în `/opt/ri-subtitles/runtime`**, dintr-o arhivă Astral python-build-standalone cu versiune și SHA-256 fixate. Verifică arhiva înainte de extragere și creează un mediu virtual de probă. Sunt acceptate Linux x86_64/aarch64 cu glibc 2.28+ și minimum 1 GiB liber pentru pregătire.
+
+Comanda nu schimbă `/usr/bin/python3`, alternativele sistemului, PATH-ul sau configurațiile serviciilor existente. Nu instalează PPA-uri ori pachete ale distribuției. Runtime-ul rămâne permanent în directorul aplicației, fiind baza mediilor virtuale ale release-urilor; nu îl ștergeți cât timp acestea sunt folosite. Repetarea comenzii reutilizează interpreterul compatibil.
+
+Dacă folosiți o instalare Python într-o altă cale publică, puteți indica executabilul explicit:
 
 ```bash
 sudo env RI_PYTHON_BIN=/usr/bin/python3.12 bash server/scripts/inspect_vps.sh
 sudo env RI_PYTHON_BIN=/usr/bin/python3.12 bash server/deploy/install.sh
 ```
 
-Prima comandă doar verifică resursele, dependențele și vhost-ul TLS activ. Nu modifică configurații și nu imprimă conținutul Nginx. A doua copiază codul din commit, instalează dependențele fixate, descarcă și verifică modelul și îl încarcă o dată offline înainte de activare.
+O cale explicită invalidă produce eroare și nu este înlocuită automat. Instalările aflate în `/root`, `/home` sau `/run/user` sunt respinse deoarece serviciul folosește `ProtectHome=true`.
+
+`inspect_vps.sh` doar verifică resursele, dependențele și vhost-ul TLS activ. Nu descarcă și nu instalează Python, nu modifică configurații și nu imprimă conținutul Nginx. `install.sh` copiază codul din commit, instalează dependențele fixate, descarcă și verifică modelul și îl încarcă o dată offline înainte de activare.
+
+Mesajul **„Este necesar Python 3.12+ cu modulul venv”** dintr-o revizie mai veche se referă la Python-ul selectat de acel lansator. Folosiți revizia corectată și rulați cele trei comenzi de mai sus; nu înlocuiți Python-ul distribuției. Verificarea poate semnala apoi o altă dependență lipsă, de exemplu FFmpeg, sau resurse insuficiente; pregătirea Python nu ocolește aceste verificări.
 
 Instalatorul identifică exact un bloc TLS cu `server_name djcioko.ro` în rezultatul real `nginx -T`. Un vhost absent, ambiguu, indirect sau un prefix deja folosit în altă configurație oprește instalarea pentru verificare manuală. Se introduce un singur include în blocul selectat; restul textului rămâne neschimbat.
 
@@ -69,6 +78,7 @@ Introduceți codul în interfața R&I Camera. Nu îl adăugați în surse, URL, 
 
 | Cale | Rol |
 | --- | --- |
+| `/opt/ri-subtitles/runtime` | Python separat, când nu există deja unul compatibil; bază persistentă pentru venv |
 | `/opt/ri-subtitles/releases/<sha>` | Cod și mediu virtual pentru o revizie |
 | `/opt/ri-subtitles/current` | Referință la release-ul activ |
 | `/var/lib/ri-subtitles-model/<revizie>` | Model verificat, fără scriere din serviciu |
@@ -114,7 +124,7 @@ python3.12 -m venv .venv
 .venv/bin/python -m pip install -r server/requirements.lock.txt -r server/requirements-test.txt
 PYTHONPATH=server .venv/bin/python -m unittest discover -s server/tests -v
 node --test tests/*.test.js
-bash -n server/scripts/inspect_vps.sh server/deploy/install.sh
+bash -n server/scripts/*.sh server/deploy/install.sh
 ```
 
 Testele includ cereri FastAPI/ASGI reale în proces, upload întrerupt, limite, idempotency, anulare cu proces copil, recuperare, expirare, patch-uri Nginx pe configurații de probă și export FFmpeg nativ cu sunet/rotație/diacritice. Testele nu instalează modelul și nu contactează VPS-ul.
@@ -125,6 +135,7 @@ Pentru proba vocală reală, `server/scripts/download_model.py --model-dir <dire
 
 ### Dependențe și surse
 
+- Runtime opțional [CPython 3.12.15, build Astral 20261003](https://github.com/astral-sh/python-build-standalone/releases/tag/20261003), arhive `install_only_stripped`; hash-uri verificate și în [metadatele uv 0.12.24](https://github.com/astral-sh/uv/blob/0.12.24/crates/uv-python-managed/download-metadata.json). Nu se instalează uv. Dependențele aplicației folosesc exclusiv wheel-uri binare, fără compilare de extensii în acest runtime.
 - [faster-whisper](https://github.com/SYSTRAN/faster-whisper), versiunea 1.2.1; [CTranslate2](https://opennmt.net/CTranslate2/), 4.8.2, CPU INT8.
 - [Modelul fixat](https://huggingface.co/dropbox-dash/faster-whisper-large-v3-turbo/tree/0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf), revizia `0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf`; model.bin SHA-256 `e76620f83d5f5b69efd3d87e3dc180c1bd21df9fbebacfd4335e5e1efcc018da`.
 - [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/settings/), [FFmpeg](https://ffmpeg.org/ffmpeg.html), [proxy_pass Nginx](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass), [socketuri systemd](https://www.freedesktop.org/software/systemd/man/latest/systemd.socket.html).

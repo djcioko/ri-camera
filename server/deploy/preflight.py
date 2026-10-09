@@ -31,7 +31,11 @@ def inspect():
     if os.geteuid() != 0:
         raise PreflightError("Rulați verificarea cu sudo pe VPS (citește configurația Nginx activă).")
     if sys.version_info < (3, 12):
-        raise PreflightError("Este necesar Python 3.12+ cu modulul venv; instalatorul nu schimbă Python-ul sistemului.")
+        raise PreflightError(f"Python {sys.version_info.major}.{sys.version_info.minor} este prea vechi. Rulați sudo bash server/scripts/setup_python.sh pentru runtime-ul separat.")
+    try:
+        import ensurepip, venv
+    except ImportError:
+        raise PreflightError("Lipsește venv/ensurepip. Rulați sudo bash server/scripts/setup_python.sh pentru runtime-ul separat.")
     if platform.system() != "Linux" or not Path("/run/systemd/system").is_dir():
         raise PreflightError("Este necesar Linux cu systemd activ.")
     for name in ("nginx", "systemctl", "systemd-analyze", "ffmpeg", "ffprobe", "curl", "git", "useradd"):

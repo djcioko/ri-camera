@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ri_script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-ri_python_bin=${RI_PYTHON_BIN:-python3}
+source "$ri_script_dir/python_runtime.sh"
+ri_python_bin=$(ri_resolve_python)
 exec "$ri_python_bin" "$ri_script_dir/../deploy/preflight.py"
