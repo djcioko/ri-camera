@@ -137,3 +137,39 @@ button:disabled { opacity: .45; cursor: not-allowed; }
   .processing-notice { padding: 4px 10px; }
   .processing-notice button { margin-top: 3px; }
 }
+
+/* Dedicated server subtitle route; controls remain readable on narrow phones. */
+.subtitle-panel {
+  width: min(760px, 100%);
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 auto;
+  padding: 20px;
+  box-sizing: border-box;
+  border: 1px solid #3c3620;
+  border-radius: 16px;
+  background: #131313;
+  line-height: 1.55;
+}
+.subtitle-panel .drawer-head { gap: 12px; flex-wrap: wrap; }
+.subtitle-panel label { display: block; margin: 18px 0 6px; font-weight: 600; }
+.subtitle-panel input, .subtitle-panel select, .processor-option select, .private-code {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 12px;
+  border: 1px solid #514b36;
+  border-radius: 9px;
+  background: #202020;
+  color: #fff;
+  font: inherit;
+}
+.subtitle-panel input, .subtitle-panel select { width: 100%; }
+.processor-option { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.subtitle-submit { margin: 12px 0; padding: 14px 20px; font-weight: 700; }
+#subtitleModuleStatus { white-space: pre-line; overflow-wrap: anywhere; }
+@media (max-width: 540px) {
+  .subtitle-panel { margin: 0; border-radius: 0; padding: 16px; }
+  .topbar { flex-wrap: wrap; }
+  .top-meta { min-width: 170px; }
+}

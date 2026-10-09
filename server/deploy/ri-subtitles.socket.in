@@ -1,0 +1,14 @@
+[Unit]
+Description=Private socket for R&I Camera subtitle API
+
+[Socket]
+ListenStream=/run/ri-subtitles/api.sock
+SocketUser=ri-subtitles
+SocketGroup=@NGINX_GROUP@
+SocketMode=0660
+DirectoryMode=0755
+RemoveOnStop=true
+Service=ri-subtitles.service
+
+[Install]
+WantedBy=sockets.target

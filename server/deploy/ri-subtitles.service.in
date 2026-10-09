@@ -1,0 +1,43 @@
+[Unit]
+Description=R&I Camera Romanian subtitle processor
+Requires=ri-subtitles.socket
+After=ri-subtitles.socket
+
+[Service]
+Type=simple
+User=ri-subtitles
+Group=ri-subtitles
+WorkingDirectory=/opt/ri-subtitles/current/server
+EnvironmentFile=/etc/ri-subtitles/service.env
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+ExecStart=/opt/ri-subtitles/current/.venv/bin/python -m uvicorn ri_subtitles.api:create_app --factory --fd 3 --workers 1 --no-access-log --no-proxy-headers --limit-concurrency 16 --timeout-keep-alive 5
+Sockets=ri-subtitles.socket
+StateDirectory=ri-subtitles
+StateDirectoryMode=0700
+UMask=0077
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+KillMode=control-group
+Nice=10
+CPUQuota=150%
+MemoryHigh=3G
+MemoryMax=4G
+TasksMax=96
+OOMPolicy=stop
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/var/lib/ri-subtitles
+
+[Install]
+WantedBy=multi-user.target

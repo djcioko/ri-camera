@@ -189,3 +189,35 @@ test("camera opening blocks rapid flips and recording until preview is ready, an
   assert.equal(f.element("btnFlipBig").disabled, false);
   assert.equal(f.element("btnRec").disabled, true);
 });
+
+test('direct subtitle route and opening module during acquisition never activate camera', async () => {
+  const f=fixture(); f.context.location={hash:'#subtitrari'}; vm.runInContext('stream=null;', f.context);
+  let count=0; f.context.navigator.mediaDevices={getUserMedia:async()=>{count++;throw Error('unexpected');}};
+  await vm.runInContext('startCamera()',f.context); assert.equal(count,0);
+  f.context.location.hash=''; let resolve; const stopped=[];
+  f.context.navigator.mediaDevices.getUserMedia=()=>new Promise(r=>resolve=r);
+  const opened=vm.runInContext('startCamera()',f.context);
+  f.context.location.hash='#subtitrari';
+  resolve({getTracks:()=>[{stop:()=>stopped.push(true)}]}); await opened;
+  assert.equal(stopped.length,1);assert.equal(vm.runInContext('stream',f.context),null);
+});
+
+test('camera freezes explicit server processor at recording start',async()=>{
+ const f=fixture();f.element('subtitleProcessor').value='server';
+ f.context.RIServerSubtitlePipeline={processClip:async(clip)=>{f.context.processed=clip;return clip;}};
+ vm.runInContext('startRecording()',f.context);const recorder=vm.runInContext('mediaRecorder',f.context);
+ f.element('subtitleProcessor').value='device';recorder.ondataavailable({data:new Blob(['movie'],{type:recorder.mimeType})});await recorder.onstop();
+ assert.equal(f.context.processed.subtitleProcessor,'server');
+});
+
+test('returning to camera while an older acquisition is pending restarts the current preview',async()=>{
+ const f=fixture();f.context.location={hash:''};vm.runInContext('stream=null;',f.context);
+ const requests=[],stopped=[];f.context.navigator.mediaDevices={getUserMedia:()=>new Promise(resolve=>requests.push(resolve))};
+ const opening=vm.runInContext('startCamera()',f.context);
+ vm.runInContext('cameraGeneration++;',f.context);f.context.location.hash='#subtitrari';
+ f.context.location.hash='#camera';await vm.runInContext('startCamera()',f.context);
+ requests[0]({getTracks:()=>[{stop:()=>stopped.push(true)}]});await opening;await Promise.resolve();
+ assert.equal(stopped.length,1);assert.equal(requests.length,2);
+ // Resolve the restarted request with a preview failure to settle the fixture.
+ f.element('liveVideo').play=async()=>{throw Error('fixture preview stopped');};requests[1]({getTracks:()=>[{stop(){}}]});
+});
