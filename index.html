@@ -7,7 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <title>R&I Camera — Șantier</title>
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=5" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <link rel="icon" href="assets/logo.png" />
 </head>
 <body>
@@ -39,13 +39,13 @@
 
   <section id="subtitlePanel" class="subtitle-panel hidden" aria-labelledby="subtitleTitle">
     <div class="drawer-head"><h2 id="subtitleTitle">Subtitrări în română</h2><button id="btnCloseSubtitles" type="button" class="icon-btn">Înapoi la Cameră</button></div>
-    <p>Transcrierea și conversia rulează pe <strong>djcioko.ro</strong>. După confirmare, originalul este salvat în Arhivă și apoi trimis către acest server. Telefonul nu descarcă modelul vocal.</p>
+    <p>Transcrierea și conversia rulează pe <strong>ai.djshopitalia.it</strong>. După confirmare, originalul este salvat în Arhivă și apoi trimis către acest server. Telefonul nu descarcă modelul vocal.</p>
     <p class="subtitle-help">Maximum 512 MB și 15 minute. Copia de pe server se șterge după salvarea rezultatului sau expiră în cel mult 24 de ore. Dacă browserul nu poate reda un MOV/HEVC, îl poți trimite în continuare pentru analiză pe server.</p>
     <label for="subtitleFile">Videoclip din dispozitiv</label>
     <input id="subtitleFile" type="file" accept="video/*,.mov,.mp4,.webm,.mkv" />
     <label for="subtitleArchive">Sau original din Arhivă</label>
     <select id="subtitleArchive"><option value="">Alege un original din Arhivă</option></select>
-    <label for="subtitleAccessCode">Cod privat de acces · djcioko.ro</label>
+    <label for="subtitleAccessCode">Cod privat de acces · ai.djshopitalia.it</label>
     <input id="subtitleAccessCode" class="private-code" type="password" autocomplete="off" spellcheck="false" />
     <p class="subtitle-help">Codul rămâne numai în această pagină și trebuie introdus din nou după reîncărcare. Alegerea unui fișier nu îl transmite.</p>
     <button id="btnServerSubtitle" class="pill subtitle-submit" type="button">Subtitrează pe server</button>
@@ -79,10 +79,10 @@
       </div>
       <label class="subtitle-option"><input id="chkSubtitles" type="checkbox" checked /> Subtitrare automată · Română</label>
       <label class="processor-option" for="subtitleProcessor">Procesor subtitrare
-        <select id="subtitleProcessor"><option value="device">Dispozitiv</option><option value="server">Server djcioko.ro</option></select>
+        <select id="subtitleProcessor"><option value="device">Dispozitiv</option><option value="server">Server ai.djshopitalia.it</option></select>
       </label>
       <p id="processorDescription" class="subtitle-help"></p>
-      <input id="cameraAccessCode" class="private-code hidden" type="password" autocomplete="off" aria-label="Cod privat de acces pentru server djcioko.ro" placeholder="Cod privat de acces · djcioko.ro" />
+      <input id="cameraAccessCode" class="private-code hidden" type="password" autocomplete="off" aria-label="Cod privat de acces pentru server ai.djshopitalia.it" placeholder="Cod privat de acces · ai.djshopitalia.it" />
       <div class="sliders">
         <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
         <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
@@ -103,15 +103,15 @@
     <div id="clipList" class="clip-list"></div>
   </aside>
 
-  <script src="overlay-utils.js?v=5"></script>
-  <script src="media-utils.js?v=5"></script>
-  <script src="subtitle-utils.js?v=5"></script>
-  <script src="media-processor.js?v=5"></script>
-  <script src="speech-recognizer.js?v=5"></script>
-  <script src="server-subtitle-client.js?v=5"></script>
-  <script src="server-subtitle-pipeline.js?v=5"></script>
-  <script src="subtitle-module.js?v=5"></script>
-  <script src="recording-pipeline.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="overlay-utils.js?v=6"></script>
+  <script src="media-utils.js?v=6"></script>
+  <script src="subtitle-utils.js?v=6"></script>
+  <script src="media-processor.js?v=6"></script>
+  <script src="speech-recognizer.js?v=6"></script>
+  <script src="server-subtitle-client.js?v=6"></script>
+  <script src="server-subtitle-pipeline.js?v=6"></script>
+  <script src="subtitle-module.js?v=6"></script>
+  <script src="recording-pipeline.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>

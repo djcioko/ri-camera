@@ -11,8 +11,8 @@ Aplicație web instalabilă (PWA) pentru filmări de șantier, cu camera și mic
 - Fișier **SRT** separat cu textul și timpii subtitrării.
 - Filmarea originală și rezultatul subtitrat păstrate separat în Arhivă (IndexedDB).
 - Progres, oprirea prelucrării și reluare din Arhivă. Dacă textul a fost deja calculat, o reluare după un export nereușit refolosește acei timpi.
-- **Modul separat „Subtitrări”** pentru un fișier video din telefon sau un original din Arhivă, cu procesare pe VPS-ul `djcioko.ro`.
-- Procesor selectabil pentru filmările noi: **Dispozitiv** sau **Server djcioko.ro**. Alegerea inițială rămâne Dispozitiv; modulul separat folosește serverul.
+- **Modul separat „Subtitrări”** pentru un fișier video din telefon sau un original din Arhivă, cu procesare pe VPS-ul `ai.djshopitalia.it`.
+- Procesor selectabil pentru filmările noi: **Dispozitiv** sau **Server ai.djshopitalia.it**. Alegerea inițială rămâne Dispozitiv; modulul separat folosește serverul.
 
 ## Modulul separat de subtitrare
 
@@ -20,10 +20,12 @@ După publicarea acestei versiuni și activarea serviciului VPS, deschide **Subt
 
 1. Alege un video din dispozitiv sau un original din Arhivă. Alegerea fișierului nu îl transmite.
 2. Introdu codul privat primit de la administratorul VPS-ului. Codul rămâne doar în memoria paginii și trebuie introdus din nou după redeschidere.
-3. Apasă **Subtitrează pe server**. Aplicația salvează originalul în Arhivă înainte să îl trimită către `djcioko.ro`.
+3. Apasă **Subtitrează pe server**. Aplicația salvează originalul în Arhivă înainte să îl trimită către `ai.djshopitalia.it`.
 4. La final găsești **MP4 subtitrat**, **Text SRT** și **Original** în Arhivă. Pentru un video fără vorbire, rezultatul este un MP4 fără subtitrare.
 
-Pentru subtitrarea automată a filmărilor noi pe VPS, alege **Server djcioko.ro** înainte să pornești filmarea și lasă subtitrarea automată bifată. Procesorul ales la început rămâne valabil pentru întreaga filmare. Dacă subtitrarea este oprită în modul server, se păstrează originalul fără procesare.
+Procesarea pe server folosește VPS-ul **OVH**, la `ai.djshopitalia.it`. Modelul vocal și limitele profilului standard sunt păstrate; interfața și Arhiva rămân în R&I Camera de pe GitHub Pages.
+
+Pentru subtitrarea automată a filmărilor noi pe VPS, alege **Server ai.djshopitalia.it** înainte să pornești filmarea și lasă subtitrarea automată bifată. Procesorul ales la început rămâne valabil pentru întreaga filmare. Dacă subtitrarea este oprită în modul server, se păstrează originalul fără procesare.
 
 Procesarea pe server necesită internet. Modelul vocal și motorul de export rulează pe VPS, fără descărcarea lor pe telefon în acest mod. O întrerupere de rețea păstrează originalul și referința lucrării: din Arhivă poți reconecta sau relua salvarea rezultatului. Oprirea este confirmată doar după răspunsul serverului. Fișierele de pe VPS expiră în cel mult 24 de ore, iar copia finalizată este ștearsă mai devreme după salvarea rezultatului în browser.
 
@@ -45,7 +47,7 @@ Dacă stocarea locală este plină sau indisponibilă, aplicația oferă un buto
 
 Funcția transcrie **vorbirea în română**. Nu este un serviciu de traducere din alte limbi. Primește pista microfonului folosit la filmare; nu identifică automat persoana care vorbește și nu separă prezentatorul de alte voci captate de același microfon. Pentru subtitrarea prezentatorului, folosește un microfon apropiat de acesta.
 
-În modul **Dispozitiv**, înregistrările audio/video nu sunt încărcate pe un serviciu de transcriere. Recunoașterea vocală și exportul rulează local, în Web Workers. La prima folosire locală se descarcă **aproximativ 820 MB**: circa 759 MB pentru model și restul pentru motoarele și fișierele de procesare. Folosește Wi-Fi pentru prima descărcare. Modelul și motorul video sunt păstrate în cache când browserul și spațiul disponibil permit. După ștergerea cache-ului este necesară o nouă descărcare. În modul **Server djcioko.ro**, video-ul este trimis explicit către VPS-ul ales, folosind codul privat; nu este trimis unui API extern de transcriere. Modelul de pe VPS are aproximativ 1,62 GB și se descarcă o singură dată la instalare.
+În modul **Dispozitiv**, înregistrările audio/video nu sunt încărcate pe un serviciu de transcriere. Recunoașterea vocală și exportul rulează local, în Web Workers. La prima folosire locală se descarcă **aproximativ 820 MB**: circa 759 MB pentru model și restul pentru motoarele și fișierele de procesare. Folosește Wi-Fi pentru prima descărcare. Modelul și motorul video sunt păstrate în cache când browserul și spațiul disponibil permit. După ștergerea cache-ului este necesară o nouă descărcare. În modul **Server ai.djshopitalia.it**, video-ul este trimis explicit către VPS-ul ales, folosind codul privat; nu este trimis unui API extern de transcriere. Modelul de pe VPS are aproximativ 1,62 GB și se descarcă o singură dată la instalare.
 
 Procesarea pe telefon poate dura, în special pentru clipuri lungi sau rezoluții mari. Aplicația eliberează motorul video înainte de transcriere și modelul vocal înainte de export, pentru a reduce memoria folosită simultan. Păstrează pagina în prim-plan. Verifică textul rezultat, mai ales la nume proprii, termeni tehnici, zgomot puternic sau voci suprapuse; recunoașterea automată poate greși.
 

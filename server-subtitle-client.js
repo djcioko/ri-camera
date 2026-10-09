@@ -3,7 +3,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   root.RIServerSubtitleClient = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  const BASE_URL = 'https://djcioko.ro/api/ri-subtitles/v1';
+  const BASE_URL = 'https://ai.djshopitalia.it/api/ri-subtitles/v1';
   const MAX_INPUT_BYTES = 512 * 1024 * 1024;
   const MAX_OUTPUT_BYTES = 4 * 1024 * 1024 * 1024;
   const statuses = ['awaiting_upload','uploading','queued','transcribing','rendering','ready','empty','failed','cancelled','expired'];
@@ -35,7 +35,7 @@
     const getAccessCode = options.getAccessCode || (() => '');
     async function request(path, settings = {}) {
       const code = getAccessCode();
-      if (!code || /[\r\n]/.test(code)) throw new Error('Introdu codul privat de acces pentru djcioko.ro.');
+      if (!code || /[\r\n]/.test(code)) throw new Error('Introdu codul privat de acces pentru ai.djshopitalia.it.');
       const response = await fetchImpl(BASE_URL + path, { ...settings, credentials: 'omit', redirect: 'error', cache: 'no-store', headers: { ...settings.headers, Authorization: 'Bearer ' + code } });
       if (!response.ok) {
         let serverCode = '';

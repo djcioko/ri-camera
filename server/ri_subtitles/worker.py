@@ -282,6 +282,9 @@ def read_audio_samples(audio):
 def recognize_audio(audio, model_dir, cpu_threads, duration, progress, deadline):
     verify_model(model_dir, deadline)
     check_deadline(deadline)
+    # Disable ONNX telemetry before faster-whisper imports ONNX Runtime, also
+    # when this worker is run directly outside its isolated systemd service.
+    os.environ['ORT_DISABLE_TELEMETRY'] = '1'
     from faster_whisper import WhisperModel
     model = WhisperModel(str(model_dir), device='cpu', compute_type='int8', cpu_threads=cpu_threads,
                          num_workers=1, local_files_only=True)

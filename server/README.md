@@ -1,6 +1,8 @@
-# Subtitrări românești pe VPS-ul djcioko.ro
+# Subtitrări românești pe VPS-ul OVH · ai.djshopitalia.it
 
-Serviciu separat pentru modulul **Subtitrări** și pentru filmările cu procesorul **Server djcioko.ro** din R&I Camera. Transcrie vocea în română și produce MP4 H.264/AAC cu text inclus în imagine și SRT. Procesarea are loc pe VPS; serviciul nu trimite înregistrarea către un API extern de recunoaștere.
+Serviciu separat pentru modulul **Subtitrări** și pentru filmările cu procesorul **Server ai.djshopitalia.it** din R&I Camera. Transcrie vocea în română și produce MP4 H.264/AAC cu text inclus în imagine și SRT. Procesarea are loc pe VPS; serviciul nu trimite înregistrarea către un API extern de recunoaștere.
+
+Destinația aleasă pentru procesare este VPS-ul **OVH**, la `ai.djshopitalia.it`, cu resurse pentru profilul standard și FFmpeg 8.0.1 deja disponibil. Se păstrează modelul large-v3-turbo, limitele și izolarea serviciului; nu este necesar un profil cu model redus. Parametrul `--host ai.djshopitalia.it` selectează explicit vhost-ul TLS pentru verificare și instalare.
 
 Interfața rămâne pe GitHub Pages. Publicarea acestui cod în repository **nu activează automat VPS-ul**. Instalatorul trebuie executat în terminalul serverului de către administrator. Nu introduceți parola SSH, cheia privată sau codul aplicației în GitHub ori în conversații.
 
@@ -8,7 +10,7 @@ Interfața rămâne pe GitHub Pages. Publicarea acestui cod în repository **nu 
 
 După instalare și publicarea interfeței, deschideți `https://djcioko.github.io/ri-camera/#subtitrari`, alegeți video-ul sau originalul din Arhivă, introduceți codul privat și apăsați **Subtitrează pe server**. Alegerea fișierului nu îl încarcă. Originalul se salvează local înainte de upload și rămâne disponibil separat de rezultat.
 
-Codul rămâne în memoria paginii; redeschiderea cere reintroducerea lui. Destinația vizibilă este `djcioko.ro`. Modulul nu pornește camera/microfonul. În camera principală, procesarea pe server este o alegere explicită înainte de filmare; Dispozitiv rămâne alegerea inițială.
+Codul rămâne în memoria paginii; redeschiderea cere reintroducerea lui. Destinația vizibilă este `ai.djshopitalia.it`. Modulul nu pornește camera/microfonul. În camera principală, procesarea pe server este o alegere explicită înainte de filmare; Dispozitiv rămâne alegerea inițială.
 
 ## Limite și resurse
 
@@ -37,8 +39,8 @@ Din rădăcina checkout-ului:
 
 ```bash
 sudo bash server/scripts/setup_python.sh
-sudo bash server/scripts/inspect_vps.sh
-sudo bash server/deploy/install.sh
+sudo bash server/scripts/inspect_vps.sh --host ai.djshopitalia.it
+sudo bash server/deploy/install.sh --host ai.djshopitalia.it
 ```
 
 `setup_python.sh` caută întâi un CPython 3.12+ existent, cu `venv`, `ensurepip`, SSL și SQLite. Sunt recunoscute și executabilele `python3.12`, `python3.13` și `python3.14`, chiar dacă `python3` este mai vechi. Dacă nu există unul compatibil, pregătește **Python 3.12.15 separat în `/opt/ri-subtitles/runtime`**, dintr-o arhivă Astral python-build-standalone cu versiune și SHA-256 fixate. Verifică arhiva înainte de extragere și creează un mediu virtual de probă. Sunt acceptate Linux x86_64/aarch64 cu glibc 2.28+ și minimum 1 GiB liber pentru pregătire.
@@ -48,8 +50,8 @@ Comanda nu schimbă `/usr/bin/python3`, alternativele sistemului, PATH-ul sau co
 Dacă folosiți o instalare Python într-o altă cale publică, puteți indica executabilul explicit:
 
 ```bash
-sudo env RI_PYTHON_BIN=/usr/bin/python3.12 bash server/scripts/inspect_vps.sh
-sudo env RI_PYTHON_BIN=/usr/bin/python3.12 bash server/deploy/install.sh
+sudo env RI_PYTHON_BIN=/usr/bin/python3.12 bash server/scripts/inspect_vps.sh --host ai.djshopitalia.it
+sudo env RI_PYTHON_BIN=/usr/bin/python3.12 bash server/deploy/install.sh --host ai.djshopitalia.it
 ```
 
 O cale explicită invalidă produce eroare și nu este înlocuită automat. Instalările aflate în `/root`, `/home` sau `/run/user` sunt respinse deoarece serviciul folosește `ProtectHome=true`.
@@ -58,7 +60,7 @@ O cale explicită invalidă produce eroare și nu este înlocuită automat. Inst
 
 Mesajul **„Este necesar Python 3.12+ cu modulul venv”** dintr-o revizie mai veche se referă la Python-ul selectat de acel lansator. Folosiți revizia corectată și rulați cele trei comenzi de mai sus; nu înlocuiți Python-ul distribuției. Verificarea poate semnala apoi o altă dependență lipsă, de exemplu FFmpeg, sau resurse insuficiente; pregătirea Python nu ocolește aceste verificări.
 
-Instalatorul identifică exact un bloc TLS cu `server_name djcioko.ro` în rezultatul real `nginx -T`. Un vhost absent, ambiguu, indirect sau un prefix deja folosit în altă configurație oprește instalarea pentru verificare manuală. Se introduce un singur include în blocul selectat; restul textului rămâne neschimbat.
+Instalatorul identifică exact un bloc TLS cu `server_name ai.djshopitalia.it` în rezultatul real `nginx -T`. Un vhost absent, ambiguu, indirect sau un prefix deja folosit în altă configurație oprește instalarea pentru verificare manuală. Se introduce un singur include în blocul selectat; restul textului rămâne neschimbat.
 
 Fișierele existente care urmează să fie modificate se salvează cu dată într-un director privat `/var/backups/ri-subtitles/`. Instalatorul rulează `nginx -t`, verifică unitățile systemd, pornește numai serviciul propriu și verifică autentificarea și readiness pe socket. Reîncarcă Nginx și verifică ruta HTTPS. Dacă activarea eșuează, restaurează configurațiile salvate și starea anterioară a serviciului. Modelul și release-ul descărcat rămân pentru diagnostic; nu se șterg filmări locale sau datele altor aplicații.
 
@@ -93,14 +95,14 @@ Comenzi de stare:
 
 ```bash
 sudo systemctl status ri-subtitles.service ri-subtitles.socket --no-pager
-curl --fail https://djcioko.ro/api/ri-subtitles/v1/health
+curl --fail https://ai.djshopitalia.it/api/ri-subtitles/v1/health
 ```
 
 O actualizare folosește instalatorul din următoarea revizie revizuită. El păstrează codul privat și limitele opționale din configurare. Modificările manuale ale fișierelor gestionate necesită revizuire înainte de actualizare; scriptul nu le suprascrie automat. Nu ștergeți automat release-uri sau backupuri: verificați mai întâi ce revizie folosește unitatea activă.
 
 ## API și confidențialitate
 
-Prefix public `https://djcioko.ro/api/ri-subtitles/v1`; backend `/v1`. Toate cererile private folosesc `Authorization: Bearer <cod>`. Codul este verificat înainte de citirea uploadului. CORS permite exact `https://djcioko.github.io`, fără cookies. Ruta publică `/health` comunică doar readiness și limitele.
+Prefix public `https://ai.djshopitalia.it/api/ri-subtitles/v1`; backend `/v1`. Toate cererile private folosesc `Authorization: Bearer <cod>`. Codul este verificat înainte de citirea uploadului. CORS permite exact `https://djcioko.github.io`, fără cookies. Ruta publică `/health` comunică doar readiness și limitele.
 
 | Rută | Funcție |
 | --- | --- |

@@ -9,7 +9,7 @@ User=ri-subtitles
 Group=ri-subtitles
 WorkingDirectory=/opt/ri-subtitles/current/server
 EnvironmentFile=/etc/ri-subtitles/service.env
-Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
+Environment=PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 ORT_DISABLE_TELEMETRY=1 OMP_NUM_THREADS=2 OPENBLAS_NUM_THREADS=2
 ExecStart=/opt/ri-subtitles/current/.venv/bin/python -m uvicorn ri_subtitles.api:create_app --factory --fd 3 --workers 1 --no-access-log --no-proxy-headers --limit-concurrency 16 --timeout-keep-alive 5
 Sockets=ri-subtitles.socket
 StateDirectory=ri-subtitles

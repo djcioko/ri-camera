@@ -47,7 +47,7 @@
     }
     if (button) button.onclick = async () => {
       if (isBusy()) { say('Așteaptă finalizarea filmării sau a lucrării curente.'); return; }
-      if (!accessCode) { say('Introdu codul privat de acces pentru djcioko.ro.'); return; }
+      if (!accessCode) { say('Introdu codul privat de acces pentru ai.djshopitalia.it.'); return; }
       let clip;
       if (selectedFile) {
         if (!selectedFile.size || selectedFile.size > 512 * 1024 * 1024) { say('Alege un fișier video de maximum 512 MB.'); return; }

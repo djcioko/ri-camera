@@ -178,8 +178,8 @@ function subtitleStatusText(clip) {
     cancelled: "Prelucrare oprită. Poți relua oricând.",
     interrupted: "Conexiune sau salvare întreruptă. Reia din Arhivă.",
     awaiting_upload: "Original salvat. Transferul poate fi reluat.",
-    uploading: "Originalul se trimite către djcioko.ro…",
-    queued: "Lucrare în așteptare pe djcioko.ro…",
+    uploading: "Originalul se trimite către ai.djshopitalia.it…",
+    queued: "Lucrare în așteptare pe ai.djshopitalia.it…",
     expired: "Lucrarea a expirat. Poți porni o lucrare nouă.",
   };
   const label = labels[clip.subtitleStatus] || "Poți adăuga subtitrare în română acestui clip.";
@@ -869,7 +869,7 @@ if (processorSelect) {
   const updateProcessorDescription = () => {
     const description = document.getElementById("processorDescription");
     if (description) description.textContent = currentProcessor() === "server"
-      ? "Cu subtitrarea activă, originalul se trimite către djcioko.ro. Modelul vocal și conversia rulează pe server. Cu subtitrarea oprită se salvează numai originalul. Introdu codul privat de acces mai jos."
+      ? "Cu subtitrarea activă, originalul se trimite către ai.djshopitalia.it. Modelul vocal și conversia rulează pe server. Cu subtitrarea oprită se salvează numai originalul. Introdu codul privat de acces mai jos."
       : "Procesare pe acest dispozitiv. Prima utilizare descarcă aproximativ 820 MB; folosește Wi-Fi. Păstrează aplicația deschisă.";
     if (cameraAccessCode) cameraAccessCode.classList.toggle("hidden", currentProcessor() !== "server");
   };

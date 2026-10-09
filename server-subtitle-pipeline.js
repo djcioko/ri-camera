@@ -36,7 +36,7 @@
     async function snapshotPatch(snapshot) {
       if (snapshot.requestId !== requestId || (clip.remoteJob.id && snapshot.id !== clip.remoteJob.id)) throw new Error('Identitatea lucrării primite nu corespunde clipului.');
       await patch({remoteJob:{requestId,id:snapshot.id,status:snapshot.status,expiresAt:snapshot.expiresAt},subtitleStatus:['ready','empty'].includes(snapshot.status)?'rendering':snapshot.status,subtitleError:''});
-      onProgress(snapshot.message || 'Se prelucrează clipul pe djcioko.ro…');
+      onProgress(snapshot.message || 'Se prelucrează clipul pe ai.djshopitalia.it…');
     }
     async function removeRemote() {
       const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 8000);
@@ -55,7 +55,7 @@
         // reconnection snapshot. Retry only once the server requests the source;
         // queued/accepted jobs are never uploaded again.
         if (snapshot.status === 'awaiting_upload') {
-          onProgress('Originalul este salvat. Se trimite către djcioko.ro…');
+          onProgress('Originalul este salvat. Se trimite către ai.djshopitalia.it…');
           snapshot = await client.uploadSource(snapshot.id, clip.blob, {signal,requestId});
         } else {
           await (dependencies.wait || wait)(1500, signal);
@@ -68,7 +68,7 @@
         return clip;
       }
       checkAborted(signal);
-      onProgress('Se salvează MP4 și SRT din djcioko.ro în Arhivă…');
+      onProgress('Se salvează MP4 și SRT din ai.djshopitalia.it în Arhivă…');
       const output = await client.downloadOutput(snapshot.id, snapshot.outputBytes, {signal});
       checkAborted(signal);
       const srtBlob = await client.downloadSubtitles(snapshot.id, {signal});

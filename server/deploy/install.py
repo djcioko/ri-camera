@@ -19,7 +19,7 @@ import sys
 import tempfile
 import time
 
-from nginx_config import INCLUDE, inspect_dump, patch_vhost
+from nginx_config import DEFAULT_HOST, INCLUDE, inspect_dump, patch_vhost, validate_host
 from preflight import inspect, PreflightError, run
 
 
@@ -90,6 +90,24 @@ def wait_ready():
     raise PreflightError("Serviciul nu a confirmat readiness pe socket în 40 secunde.")
 
 
+def read_marker_for_host(host):
+    host = validate_host(host)
+    previous = json.loads(MARKER.read_text()) if MARKER.exists() else {}
+    if previous.get("host", DEFAULT_HOST) != host and MARKER.exists():
+        raise PreflightError("Instalarea existentă folosește alt domeniu; host-ul nu poate fi schimbat prin actualizare.")
+    return previous
+
+
+def verify_https(host):
+    host = validate_host(host)
+    url = f"https://{host}/api/ri-subtitles/v1/health"
+    common = ["curl", "--fail", "--silent", "--show-error", "--max-time", "15"]
+    for label, options in (("locală", ["--noproxy", "*", "--resolve", f"{host}:443:127.0.0.1"]), ("publică", [])):
+        health = json.loads(run(common + options + [url], timeout=20))
+        if health.get("ready") is not True:
+            raise PreflightError(f"Ruta HTTPS {label} nu confirmă readiness.")
+
+
 def create_release(source):
     revision = run(["git", "-C", str(source), "rev-parse", "HEAD"]).strip()
     if len(revision) != 40 or any(char not in "0123456789abcdef" for char in revision):
@@ -122,11 +140,13 @@ def create_release(source):
     return release, revision
 
 
-def install(source):
-    info = inspect()
+def install(source, host=DEFAULT_HOST):
+    host = validate_host(host)
+    read_marker_for_host(host)
+    info = inspect(host)
     print("Verificare inițială acceptată. Vhost TLS:", info["vhost"], flush=True)
     managed = MARKER.exists()
-    previous_marker = json.loads(MARKER.read_text()) if managed else {}
+    previous_marker = read_marker_for_host(host)
     paths = [Path(info["vhost"]), Path(INCLUDE), SERVICE, SOCKET, CONFIG / "service.env", MARKER]
     initial_contents = {path: path.read_bytes() if path.is_file() else None for path in paths}
     for path in paths[1:]:
@@ -153,7 +173,7 @@ def install(source):
     MODEL.parent.chmod(0o755)
     print("Instalez/verific modelul vocal fixat (aproximativ 1,62 GB).", flush=True)
     subprocess.run([interpreter, str(release / "server/scripts/download_model.py"), "--model-dir", str(MODEL)], check=True)
-    environment = {**os.environ, "HF_HUB_OFFLINE": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "OMP_NUM_THREADS": "2"}
+    environment = {**os.environ, "HF_HUB_OFFLINE": "1", "HF_HUB_DISABLE_TELEMETRY": "1", "ORT_DISABLE_TELEMETRY": "1", "OMP_NUM_THREADS": "2"}
     account_marker = BASE / "account.json"
     try:
         account = pwd.getpwnam("ri-subtitles")
@@ -210,8 +230,8 @@ def install(source):
         raise PreflightError("/opt/ri-subtitles/current există și nu este symlink; nu se înlocuiește.")
     vhost_original = paths[0].read_bytes()
     contents = {
-        paths[0]: patch_vhost(vhost_original.decode(), "djcioko.ro").encode(),
-        Path(INCLUDE): (release / "server/deploy/ri-subtitles.nginx.conf").read_bytes(),
+        paths[0]: patch_vhost(vhost_original.decode(), host).encode(),
+        Path(INCLUDE): (release / "server/deploy/ri-subtitles.nginx.conf").read_text().replace("@API_HOST@", host).encode(),
         SERVICE: (release / "server/deploy/ri-subtitles.service.in").read_text().replace("/opt/ri-subtitles/current", str(release)).encode(),
         SOCKET: (release / "server/deploy/ri-subtitles.socket.in").read_text().replace("@NGINX_GROUP@", info["nginx_group"]).encode(),
         service_env: env_text.encode(),
@@ -219,7 +239,7 @@ def install(source):
     changed = False
     try:
         # Detect a concurrent administrator edit after preflight/model setup.
-        current_info = inspect_dump(run(["nginx", "-T"]))
+        current_info = inspect_dump(run(["nginx", "-T"]), host)
         if (Path(current_info["vhost"]).resolve() != paths[0] or current_info["nginx_group"] != info["nginx_group"]
                 or any((path.read_bytes() if path.is_file() else None) != value for path, value in initial_contents.items())):
             raise PreflightError("Configurația activă s-a schimbat în timpul instalării; reluați verificarea.")
@@ -238,13 +258,10 @@ def install(source):
         if uds_request("GET", "/v1/jobs/" + "0" * 32)[0] != 401 or uds_request("GET", "/v1/jobs/" + "0" * 32, code)[0] != 404:
             raise PreflightError("Verificarea autentificării API a eșuat.")
         run(["systemctl", "reload", "nginx"])
-        health = json.loads(run(["curl", "--fail", "--silent", "--show-error", "--max-time", "15",
-                                 "https://djcioko.ro/api/ri-subtitles/v1/health"], timeout=20))
-        if health.get("ready") is not True:
-            raise PreflightError("Ruta HTTPS publică nu confirmă readiness.")
+        verify_https(host)
         if not state("ri-subtitles.service", "is-active") or not state("ri-subtitles.socket", "is-active"):
             raise PreflightError("Serviciul sau socketul nu este activ.")
-        atomic_write(MARKER, json.dumps({"revision": revision, "vhost": info["vhost"], "backup": str(backup),
+        atomic_write(MARKER, json.dumps({"revision": revision, "host": host, "vhost": info["vhost"], "backup": str(backup),
                     "managedFiles": {str(path): hashlib.sha256(data).hexdigest() for path, data in contents.items()
                                      if path != paths[0] and path != service_env}}, indent=2).encode(), 0o600)
     except BaseException:
@@ -286,9 +303,14 @@ def install(source):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
+    parser.add_argument("--host", type=validate_host, default=DEFAULT_HOST, help="Domeniul explicit al vhost-ului TLS.")
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.exit(1, "Rulați instalatorul cu sudo în terminalul VPS-ului.\n")
+    try:
+        read_marker_for_host(args.host)
+    except (PreflightError, OSError, ValueError) as error:
+        parser.exit(1, f"Instalarea a fost oprită: {error}\n")
     # Code/model directories are public-readable; each private path is explicitly
     # created with 0700/0600 below, independent of the caller's umask.
     os.umask(0o022)
@@ -299,7 +321,7 @@ def main():
         except BlockingIOError:
             parser.exit(1, "Altă instalare ri-subtitles este în desfășurare.\n")
         try:
-            install(args.source_root.resolve())
+            install(args.source_root.resolve(), args.host)
         except Exception as error:
             # Do not print subprocess output or private configuration.
             if isinstance(error, subprocess.CalledProcessError):

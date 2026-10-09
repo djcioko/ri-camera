@@ -61,9 +61,19 @@ Probe efective pe Linux x86_64 în mediul de test:
 
 Revizuirea independentă finală nu a identificat alte defecte concrete în această corecție. Arhiva aarch64 este fixată prin metadatele oficiale și SHA-256; nu a fost executată pe hardware ARM. Mediul local nu permite schimbarea UID-ului pentru proba runtime-ului, astfel că verificarea cu utilizatorul real al serviciului rămâne obligatorie în instalator, pe VPS.
 
+## Pregătirea mutării pe OVH — 10 octombrie 2026 (Europe/Rome)
+
+Destinația selectată este `ai.djshopitalia.it`, pe VPS-ul OVH indicat de administrator. Interfața, mesajele și destinația API au fost actualizate împreună; cache-ul aplicației este acum `ri-camera-shell-v6`.
+
+- **78 teste JavaScript și 68 teste Python trecute** pentru această revizie. Cele 11 teste de instalare includ selectarea exactă a vhost-ului OVH între alte aplicații, respingerea unui host invalid/ambiguu, păstrarea celorlalte blocuri și oprirea înaintea modificărilor dacă o instalare existentă aparține altui domeniu.
+- Verificarea HTTPS folosește mai întâi serverul local cu hostname/SNI și certificatul corect, apoi adresa publică. Un răspuns de la alt server nu poate înlocui verificarea locală.
+- Rezolvarea `pip` fără instalare, cu țintă CPython 3.14 / Linux x86_64 și numai pachete binare, a găsit toate cele **32 de versiuni fixate**. Aceasta confirmă disponibilitatea wheel-urilor; încărcarea modelului pe Python-ul real al VPS-ului rămâne o verificare obligatorie a instalatorului.
+- Telemetria ONNX Runtime este dezactivată înainte de import, inclusiv la validarea modelului în instalator. Mecanismul folosit este documentat în [documentația oficială ONNX Runtime](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md). Izolarea rețelei serviciului rămâne activă.
+- Verificările Bash și `git diff --check` au trecut. Testul Chromium anterior rămâne dovada fluxului interfeței; nu a fost repetat pentru această schimbare de domeniu deoarece executabilul local Chromium nu mai era disponibil.
+
 ## Ce trebuie verificat la activare
 
-Nu există o sesiune SSH configurată către VPS în mediul de implementare. Nu s-au instalat servicii, nu s-a modificat Nginx și nu s-a publicat o rută API pe djcioko.ro din această sesiune.
+Conexiunea SSH către OVH a fost blocată de rețeaua mediului înainte de autentificare. Nu s-au instalat servicii, nu s-a modificat Nginx și nu s-a publicat o rută API pe OVH din această sesiune. Verificarea resurselor și lista domeniilor provin din rezultatul terminalului furnizat de administrator; instalatorul trebuie încă executat pe acel server.
 
 Mediul local a permis testarea HTTP prin TCP loopback, dar a refuzat crearea socketurilor AF_UNIX. Configurația de producție folosește socket UNIX; proprietatea și accesul Nginx la el sunt verificate de instalator pe serverul real. Verificarea systemd locală validează șabloanele, fără a porni un serviciu.
 

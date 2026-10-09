@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Read-only checks. Never prints nginx contents or private configuration."""
+import argparse
 import grp
 import json
 import os
@@ -11,7 +12,7 @@ import shutil
 import subprocess
 import sys
 
-from nginx_config import ConfigurationError, inspect_dump, patch_vhost
+from nginx_config import ConfigurationError, DEFAULT_HOST, inspect_dump, patch_vhost, validate_host
 
 
 class PreflightError(RuntimeError):
@@ -27,7 +28,14 @@ def run(argv, *, timeout=30):
     return result.stdout
 
 
-def inspect():
+def validate_ffmpeg_version(version):
+    match = re.search(r"ffmpeg version n?(\d+)\.", version)
+    if not match or int(match[1]) < 6:
+        raise PreflightError("Este necesar FFmpeg 6+; versiunea disponibilă nu a fost acceptată.")
+
+
+def inspect(host=DEFAULT_HOST):
+    host = validate_host(host)
     if os.geteuid() != 0:
         raise PreflightError("Rulați verificarea cu sudo pe VPS (citește configurația Nginx activă).")
     if sys.version_info < (3, 12):
@@ -66,16 +74,14 @@ def inspect():
     if not re.search(r"\bass\b", filters) or not re.search(r"\blibx264\b", encoders) or not re.search(r"\baac\b", encoders):
         raise PreflightError("FFmpeg necesită libass, libx264 și encoderul AAC.")
     ffmpeg_version = run(["ffmpeg", "-version"]).splitlines()[0]
-    version_match = re.search(r"ffmpeg version (\d+)\.", ffmpeg_version)
-    if not version_match or int(version_match[1]) < 6:
-        raise PreflightError("Este necesar FFmpeg 6+; versiunea disponibilă nu a fost acceptată.")
+    validate_ffmpeg_version(ffmpeg_version)
     dump = run(["nginx", "-T"])
-    selected = inspect_dump(dump)
+    selected = inspect_dump(dump, host)
     path = Path(selected["vhost"]).resolve(strict=True)
     if not path.is_relative_to(Path("/etc/nginx")) or not path.is_file():
         raise PreflightError("Vhost-ul activ nu este un fișier din /etc/nginx; verificare manuală necesară.")
     text = path.read_text()
-    patch_vhost(text, "djcioko.ro")
+    patch_vhost(text, host)
     group = grp.getgrnam(selected["nginx_group"])
     user = pwd.getpwnam(selected["nginx_user"])
     if user.pw_uid == 0 or group.gr_gid == 0:
@@ -88,14 +94,17 @@ def inspect():
         for node in walk(parse(content)):
             if node["args"][0] == "location" and any("ri-subtitles" in arg for arg in node["args"][1:]):
                 raise PreflightError("O altă configurație activă conține ruta ri-subtitles; verificare manuală necesară.")
-    return {**selected, "vhost": str(path), "python": sys.executable, "ffmpeg": ffmpeg_version,
+    return {**selected, "host": host, "vhost": str(path), "python": sys.executable, "ffmpeg": ffmpeg_version,
             "cpu": os.cpu_count(), "ramGiB": round(memory["MemTotal"] / 1024**3, 2),
             "availableRamGiB": round(memory["MemAvailable"] / 1024**3, 2),
             "freeDataGiB": round(shutil.disk_usage("/var/lib").free / 1024**3, 2)}
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--host", type=validate_host, default=DEFAULT_HOST, help="Domeniul explicit al vhost-ului TLS.")
+    args = parser.parse_args()
     try:
-        print(json.dumps({"readyForInstall": True, **inspect()}, indent=2))
+        print(json.dumps({"readyForInstall": True, **inspect(args.host)}, indent=2))
     except (PreflightError, ConfigurationError, OSError, KeyError, ValueError, subprocess.TimeoutExpired) as error:
         sys.exit(f"Verificare oprită: {error}")

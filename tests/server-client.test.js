@@ -8,7 +8,7 @@ test('client authenticates exact v1 schema with omitted cookies and forbidden re
   assert.equal(typeof api.createClient, 'function');
   const calls=[]; const client=api.createClient({getAccessCode:()=> 'private-test-code',fetch:async(url,options)=> {calls.push({url,options}); return new Response(JSON.stringify(snapshot()),{headers:{'Content-Type':'application/json'}});}});
   await client.createJob({requestId, filename:'original.mov', bytes:3, language:'ro'});
-  assert.equal(calls[0].url,'https://djcioko.ro/api/ri-subtitles/v1/jobs');
+  assert.equal(calls[0].url,'https://ai.djshopitalia.it/api/ri-subtitles/v1/jobs');
   assert.equal(calls[0].options.credentials,'omit'); assert.equal(calls[0].options.redirect,'error');
   assert.equal(calls[0].options.headers.Authorization,'Bearer private-test-code');
   assert.deepEqual(JSON.parse(calls[0].options.body),{requestId,filename:'original.mov',bytes:3,language:'ro'});

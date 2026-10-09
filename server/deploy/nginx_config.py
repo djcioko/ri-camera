@@ -7,10 +7,20 @@ import re
 
 
 INCLUDE = "/etc/nginx/snippets/ri-subtitles.conf"
+DEFAULT_HOST = "djcioko.ro"
 
 
 class ConfigurationError(ValueError):
     pass
+
+
+def validate_host(host):
+    label = r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?"
+    if (not isinstance(host, str) or len(host) > 253
+            or not re.fullmatch(label + r"(?:\." + label + r")+", host)
+            or host.rsplit(".", 1)[-1].isdigit()):
+        raise ConfigurationError("Host invalid: folosiți un domeniu DNS explicit, cu litere mici, fără URL, port sau wildcard.")
+    return host
 
 
 def tokens(text):
@@ -110,6 +120,7 @@ def walk(nodes):
 
 
 def matching_servers(text, domain):
+    domain = validate_host(domain)
     matches = []
     for node in walk(parse(text)):
         if node["args"] != ["server"] or node["children"] is None:
@@ -126,7 +137,7 @@ def matching_servers(text, domain):
 def patch_vhost(text, domain):
     matches = matching_servers(text, domain)
     if len(matches) != 1:
-        raise ConfigurationError("Este necesar exact un vhost TLS cu server_name djcioko.ro explicit.")
+        raise ConfigurationError(f"Este necesar exact un vhost TLS cu server_name {domain} explicit.")
     server = matches[0]
     inclusions = 0
     for child in walk(server["children"]):
@@ -165,7 +176,8 @@ def split_dump(dump):
     return result
 
 
-def inspect_dump(dump, domain="djcioko.ro"):
+def inspect_dump(dump, domain=DEFAULT_HOST):
+    domain = validate_host(domain)
     files = split_dump(dump)
     matches = []
     users = []
@@ -175,7 +187,7 @@ def inspect_dump(dump, domain="djcioko.ro"):
             if node["children"] is None and node["args"][0] == "user":
                 users.append(node["args"][1:])
     if len(matches) != 1:
-        raise ConfigurationError("Vhost TLS activ absent sau ambiguu pentru djcioko.ro.")
+        raise ConfigurationError(f"Vhost TLS activ absent sau ambiguu pentru {domain}.")
     if len(users) != 1 or not 1 <= len(users[0]) <= 2:
         raise ConfigurationError("Utilizatorul Nginx trebuie să fie explicit și unic în nginx -T.")
     user = users[0][0]
