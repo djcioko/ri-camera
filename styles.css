@@ -1,88 +1,202 @@
 /* Interfață compactă: mai mult spațiu pentru imaginea camerei */
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  background: #070707;
+  color: #eee;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
 .stage {
   flex: 1 1 auto;
   min-height: 0;
+  position: relative;
+  background: #000;
+}
+
+#renderCanvas {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
 }
 
 .controls {
-  max-height: clamp(150px, 27dvh, 245px);
-  padding: 6px 9px max(8px, env(safe-area-inset-bottom));
+  max-height: clamp(110px, 18dvh, 170px);
+  padding: 4px 8px max(6px, env(safe-area-inset-bottom));
   overflow-y: auto;
   overscroll-behavior: contain;
+  background: #111;
+  border-top: 1px solid #333;
 }
 
-/* Butoane și spațieri mai mici */
 .row-btns {
-  gap: 5px;
-  margin-bottom: 4px;
+  gap: 4px;
+  margin-bottom: 2px;
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .controls .pill {
-  min-height: 32px;
-  padding: 5px 8px;
-  font-size: 11px;
+  min-height: 28px;
+  padding: 4px 7px;
+  font-size: 10.5px;
+  background: #222;
+  border: 1px solid #444;
+  color: #eee;
+  border-radius: 6px;
 }
 
 .overlay-help {
-  margin: 0 0 4px;
-  font-size: 9px;
+  margin: 0 0 2px;
+  font-size: 8.5px;
+  color: #aaa;
 }
 
 .overlay-scale-controls {
-  gap: 4px;
-  margin-bottom: 4px;
+  gap: 3px;
+  margin-bottom: 2px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 10px;
 }
 
 .overlay-scale-controls .pill {
-  padding: 4px 6px;
+  padding: 3px 5px;
 }
 
-/* Fadere mai compacte, așezate pe orizontală */
 .sliders {
-  gap: 4px 10px;
-  margin-bottom: 4px;
+  gap: 2px 8px;
+  margin-bottom: 2px;
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .sliders label {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr);
+  grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
-  gap: 5px;
-  font-size: 10px;
+  gap: 4px;
+  font-size: 9.5px;
+  flex: 1;
+  min-width: 140px;
 }
 
 .sliders input[type="range"] {
   width: 100%;
-  height: 20px;
+  height: 18px;
   margin: 0;
 }
 
-/* Păstrează comenzile de filmare vizibile când panoul derulează */
 .actions {
   position: sticky;
   bottom: -1px;
   z-index: 2;
-  padding: 5px 0 max(4px, env(safe-area-inset-bottom));
-  background: var(--panel);
-  gap: 7px;
+  padding: 4px 0 max(3px, env(safe-area-inset-bottom));
+  background: #111;
+  gap: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .rec-btn {
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  border-radius: 50%;
+  background: #c00;
+  border: 3px solid #fff;
 }
 
-/* Pe ecrane joase, lasă panoul să deruleze fără să micșoreze excesiv imaginea */
+.rec-btn.on {
+  background: #f00;
+  box-shadow: 0 0 0 4px rgba(255,0,0,0.3);
+}
+
 @media (max-height: 520px) {
   .controls {
-    max-height: 34dvh;
-    padding-top: 4px;
+    max-height: 22dvh;
+    padding-top: 2px;
   }
 
   .rec-btn {
-    width: 40px;
-    height: 40px;
-    flex-basis: 40px;
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
   }
 }
+
+.topbar {
+  padding: 4px 8px;
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #111;
+  border-bottom: 1px solid #333;
+}
+
+.top-meta {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#siteName {
+  flex: 1;
+  background: #222;
+  border: 1px solid #444;
+  color: #fff;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.icon-btn {
+  background: #222;
+  border: 1px solid #444;
+  color: #eee;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.big-flip-btn {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(0,0,0,0.6);
+  border: 2px solid #e2c14a;
+  color: #e2c14a;
+  font-size: 22px;
+  z-index: 5;
+}
+
+.rec-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  background: #c00;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-weight: bold;
+  font-size: 13px;
+  z-index: 5;
+}
+
+.hidden { display: none !important; }
+.hidden-panel { max-height: 0; padding: 0; overflow: hidden; }
