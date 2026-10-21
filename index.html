@@ -1,34 +1,30 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
-  <meta name="theme-color" content="#070707" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <title>R&I Camera — Șantier</title>
-  <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=7" />
-  <link rel="icon" href="assets/logo.png" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#070707">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>R&amp;I Camera — Șantier</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="assets/logo.png">
 </head>
 <body>
   <div id="app">
     <header class="topbar">
       <div class="top-meta">
         <strong>R&amp;I CAMERA</strong>
-        <input id="siteName" type="text" placeholder="Nume șantier (ex. Pipera)" />
+        <input id="siteName" type="text" placeholder="Nume șantier (ex. Pipera)">
       </div>
       <button id="btnHideCtrl" class="icon-btn" title="Ascunde / Arată Controale">👁️</button>
-      <button id="btnSubtitles" class="icon-btn" type="button">Subtitrări</button>
       <button id="btnLibrary" class="icon-btn" title="Arhivă clipuri">📁 <span id="clipCount">0</span></button>
     </header>
 
     <main class="stage" id="stageArea">
-      <!-- Element video nativ ascuns pentru stream -->
       <video id="liveVideo" playsinline muted autoplay></video>
-      <!-- Canvas unificat pentru previzualizare și înregistrare cu elemente grafice -->
       <canvas id="renderCanvas"></canvas>
 
-      <!-- Buton Flip -->
       <button id="btnFlipBig" class="big-flip-btn" title="Schimbă Camera">🔄</button>
 
       <div class="hud-top-left"><span id="techInfoBadge" class="tech-badge">1080p / 60 FPS</span></div>
@@ -37,23 +33,8 @@
       <div class="vu-wrap"><div class="vu-bar"><div id="vuFill"></div></div></div>
     </main>
 
-  <section id="subtitlePanel" class="subtitle-panel hidden" aria-labelledby="subtitleTitle">
-    <div class="drawer-head"><h2 id="subtitleTitle">Subtitrări în română</h2><button id="btnCloseSubtitles" type="button" class="icon-btn">Înapoi la Cameră</button></div>
-    <p>Transcrierea și conversia rulează pe <strong>ai.djshopitalia.it</strong>. După confirmare, originalul este salvat în Arhivă și apoi trimis către acest server. Telefonul nu descarcă modelul vocal.</p>
-    <p class="subtitle-help">Maximum 512 MB și 15 minute. Copia de pe server se șterge după salvarea rezultatului sau expiră în cel mult 24 de ore. Dacă browserul nu poate reda un MOV/HEVC, îl poți trimite în continuare pentru analiză pe server.</p>
-    <label for="subtitleFile">Videoclip din dispozitiv</label>
-    <input id="subtitleFile" type="file" accept="video/*,.mov,.mp4,.webm,.mkv" />
-    <label for="subtitleArchive">Sau original din Arhivă</label>
-    <select id="subtitleArchive"><option value="">Alege un original din Arhivă</option></select>
-    <p class="subtitle-help">Alegerea unui fișier nu îl transmite. Apasă Subtitrează pe server pentru a începe.</p>
-    <button id="btnServerSubtitle" class="pill subtitle-submit" type="button">Subtitrează pe server</button>
-    <p id="subtitleModuleStatus" role="status" aria-live="polite">Alege un videoclip sau un original din Arhivă.</p>
-    <p class="subtitle-help">Rezultatul MP4 și textul SRT se descarcă din Arhivă. Pentru o lucrare întreruptă, selectează același original și apasă din nou: aplicația reconectează lucrarea deja trimisă.</p>
-  </section>
-
     <div id="processingNotice" class="processing-notice hidden">
       <p id="exportStatus" class="export-status" role="status" aria-live="polite"></p>
-      <button id="btnCancelProcess" type="button" class="icon-btn hidden">Oprește prelucrarea</button>
     </div>
     <div id="rescuePanel" class="rescue-panel hidden" role="alert">
       <p>Filmarea nu a putut fi salvată în Arhivă. Descarc-o înainte să închizi aplicația.</p>
@@ -75,40 +56,28 @@
         <button id="btnSiteMinus" class="pill" type="button">− Mic</button>
         <button id="btnSitePlus" class="pill" type="button">＋ Mare</button>
       </div>
-      <label class="subtitle-option"><input id="chkSubtitles" type="checkbox" checked /> Subtitrare automată · Română</label>
-      <label class="processor-option" for="subtitleProcessor">Procesor subtitrare
-        <select id="subtitleProcessor"><option value="device">Dispozitiv</option><option value="server">Server ai.djshopitalia.it</option></select>
-      </label>
-      <p id="processorDescription" class="subtitle-help"></p>
       <div class="sliders">
-        <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100" /></label>
-        <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100" /></label>
+        <label>Lumină <input id="sBright" type="range" min="50" max="180" value="100"></label>
+        <label>Contrast <input id="sContrast" type="range" min="50" max="200" value="100"></label>
       </div>
       <div class="actions">
         <button id="btnReset" class="pill">Reset Culori</button>
         <button id="btnRec" class="rec-btn" aria-label="Înregistrează"></button>
-        <label class="pill chk"><input id="chkDate" type="checkbox" checked /> Dată &amp; Șantier</label>
+        <label class="pill chk"><input id="chkDate" type="checkbox" checked> Dată &amp; Șantier</label>
       </div>
     </section>
   </div>
 
   <aside id="library" class="drawer hidden">
     <div class="drawer-head">
-      <h2>Arhivă Filmată (Play & Download)</h2>
+      <h2>Arhivă Filmată (Play &amp; Download)</h2>
       <button id="btnCloseLib" class="icon-btn">✕ Închide</button>
     </div>
     <div id="clipList" class="clip-list"></div>
   </aside>
 
-  <script src="overlay-utils.js?v=7"></script>
-  <script src="media-utils.js?v=7"></script>
-  <script src="subtitle-utils.js?v=7"></script>
-  <script src="media-processor.js?v=7"></script>
-  <script src="speech-recognizer.js?v=7"></script>
-  <script src="server-subtitle-client.js?v=7"></script>
-  <script src="server-subtitle-pipeline.js?v=7"></script>
-  <script src="subtitle-module.js?v=7"></script>
-  <script src="recording-pipeline.js?v=7"></script>
-  <script src="app.js?v=7"></script>
+  <script src="overlay-utils.js"></script>
+  <script src="media-utils.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
