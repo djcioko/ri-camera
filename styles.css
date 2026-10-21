@@ -1,175 +1,88 @@
-:root {
-  --bg: #070707;
-  --panel: #121212;
-  --gold: #e2c14a;
-  --text: #f4f4f4;
-  --muted: #9a9a9a;
-  --rec: #e11d2e;
+/* Interfață compactă: mai mult spațiu pentru imaginea camerei */
+.stage {
+  flex: 1 1 auto;
+  min-height: 0;
 }
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Inter, system-ui, sans-serif; overflow: hidden; }
-#app { display: flex; flex-direction: column; height: 100%; height: 100dvh; }
-
-.topbar {
-  display: flex; align-items: center; gap: 8px;
-  padding: 6px 10px; background: #000; border-bottom: 1px solid #222; z-index: 20;
-}
-.top-meta { flex: 1; display: flex; flex-direction: column; line-height: 1.15; }
-.top-meta strong { letter-spacing: .06em; font-size: 11px; color: var(--gold); }
-.top-meta input {
-  margin-top: 2px; background: #111; color: #fff; border: 1px solid #333;
-  border-radius: 6px; padding: 3px 6px; font-size: 11px; width: 100%;
-}
-.icon-btn {
-  background: #1c1c1c; color: #fff; border: 1px solid #333;
-  border-radius: 8px; padding: 6px 10px; font-size: 14px; cursor: pointer;
-}
-
-.stage { position: relative; flex: 1; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-#liveVideo { display: none; }
-#renderCanvas {
-  position: absolute; inset: 0; width: 100%; height: 100%;
-  object-fit: contain; z-index: 1; background: #000; cursor: grab; touch-action: none;
-}
-#renderCanvas:active { cursor: grabbing; }
-
-.big-flip-btn {
-  position: absolute; top: 16px; right: 16px; z-index: 15;
-  background: rgba(28, 28, 28, 0.9); color: #fff; border: 2px solid var(--gold);
-  border-radius: 50%; width: 44px; height: 44px; font-size: 18px;
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.6);
-}
-
-.hud-top-left { position: absolute; bottom: 12px; left: 12px; z-index: 5; pointer-events: none; }
-.tech-badge { background: rgba(0,0,0,0.7); color: var(--gold); border: 1px solid rgba(226,193,74,0.3); font-size: 10px; padding: 3px 6px; border-radius: 4px; font-weight: 600; }
-
-.rec-badge {
-  position: absolute; top: 16px; left: 16px; z-index: 15;
-  background: var(--rec); color: #fff; font-weight: 700;
-  padding: 4px 10px; border-radius: 999px; font-size: 12px;
-  letter-spacing: .04em; display: flex; align-items: center; gap: 6px;
-}
-.hidden { display: none !important; }
-
-.vu-wrap {
-  position: absolute; right: 12px; top: 80px; bottom: 20px; width: 6px;
-  background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; z-index: 5; pointer-events: none;
-  display: flex; align-items: flex-end;
-}
-#vuFill { width: 100%; height: 5%; background: linear-gradient(#3d9, var(--gold), var(--rec)); }
 
 .controls {
-  background: var(--panel); padding: 10px 12px 14px;
-  border-top: 1px solid #222; transition: transform 0.2s ease; z-index: 20;
-  max-height: 50dvh; overflow-y: auto; flex-shrink: 0;
+  max-height: clamp(150px, 27dvh, 245px);
+  padding: 6px 9px max(8px, env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
-.controls.hidden-panel { display: none; }
 
-.row-btns { display: flex; gap: 8px; margin-bottom: 8px; justify-content: space-between; }
-.overlay-help { margin: -2px 0 8px; color: var(--gold); font-size: 10px; text-align: center; }
+/* Butoane și spațieri mai mici */
+.row-btns {
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.controls .pill {
+  min-height: 32px;
+  padding: 5px 8px;
+  font-size: 11px;
+}
+
+.overlay-help {
+  margin: 0 0 4px;
+  font-size: 9px;
+}
+
 .overlay-scale-controls {
-  display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; align-items: center; margin-bottom: 8px;
+  gap: 4px;
+  margin-bottom: 4px;
 }
-.overlay-scale-controls span { color: var(--gold); font-size: 10px; font-weight: 800; min-width: 34px; }
-.overlay-scale-controls .pill { padding: 7px 8px; border-color: rgba(226,193,74,.45); }
-.export-status {
-  margin: 0 0 8px; padding: 7px 9px; border: 1px solid rgba(226,193,74,.45);
-  border-radius: 7px; background: #1a170b; color: var(--gold); font-size: 11px; text-align: center;
-}
-.sliders { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; margin-bottom: 8px; }
-.sliders label { font-size: 11px; color: var(--muted); display: flex; flex-direction: column; gap: 2px; }
-input[type=range] { width: 100%; accent-color: var(--gold); }
 
-.actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-.pill {
-  background: #1b1b1b; color: #fff; border: 1px solid #333;
-  border-radius: 999px; padding: 8px 12px; font-size: 12px; cursor: pointer; flex: 1; text-align: center;
+.overlay-scale-controls .pill {
+  padding: 4px 6px;
 }
-.chk { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 11px; }
+
+/* Fadere mai compacte, așezate pe orizontală */
+.sliders {
+  gap: 4px 10px;
+  margin-bottom: 4px;
+}
+
+.sliders label {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+}
+
+.sliders input[type="range"] {
+  width: 100%;
+  height: 20px;
+  margin: 0;
+}
+
+/* Păstrează comenzile de filmare vizibile când panoul derulează */
+.actions {
+  position: sticky;
+  bottom: -1px;
+  z-index: 2;
+  padding: 5px 0 max(4px, env(safe-area-inset-bottom));
+  background: var(--panel);
+  gap: 7px;
+}
 
 .rec-btn {
-  width: 54px; height: 54px; border-radius: 50%;
-  border: 3px solid #fff; background: var(--rec);
-  box-shadow: 0 0 0 3px #000, 0 0 0 5px #444; cursor: pointer; flex: unset;
-}
-.rec-btn.on { background: #fff; border-color: var(--rec); }
-
-.drawer {
-  position: fixed; inset: 0; background: #0c0c0c; z-index: 30;
-  display: flex; flex-direction: column; padding: 12px;
-}
-.drawer-head { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #222; padding-bottom: 8px; }
-.drawer-head h2 { margin: 0; font-size: 15px; color: var(--gold); }
-.clip-list { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-
-.clip-card {
-  background: #161616; border: 1px solid #2a2a2a; border-radius: 10px; padding: 10px;
-  display: flex; flex-direction: column; gap: 8px;
-}
-.clip-card video { width: 100%; max-height: 180px; object-fit: contain; background: #000; border-radius: 6px; }
-.clip-info { display: flex; justify-content: space-between; align-items: center; font-size: 12px; }
-.clip-info .meta small { color: var(--muted); display: block; }
-.clip-actions { display: flex; gap: 8px; }
-.clip-actions button { flex: 1; padding: 6px; font-size: 12px; border-radius: 6px; }
-
-button:disabled { opacity: .45; cursor: not-allowed; }
-.top-meta { min-width: 0; }
-.stage { min-height: 110px; }
-.subtitle-option { display: flex; align-items: center; gap: 8px; color: var(--gold); font-size: 12px; font-weight: 600; }
-.subtitle-option input { width: 18px; height: 18px; accent-color: var(--gold); }
-.subtitle-help { font-size: 10px; line-height: 1.5; color: var(--muted); margin: 4px 0 10px; }
-.processing-notice { flex-shrink: 0; padding: 8px 12px; background: #171409; border-top: 1px solid #544715; text-align: center; }
-.processing-notice .export-status { margin: 0; border: none; padding: 0; background: transparent; }
-.processing-notice button { margin-top: 6px; font-size: 11px; }
-.rescue-panel { padding: 10px 12px; background: #502019; flex-shrink: 0; font-size: 12px; }
-.rescue-panel p { margin: 0 0 8px; }
-.clip-card .meta { overflow-wrap: anywhere; }
-.clip-actions { flex-wrap: wrap; }
-.clip-actions button { min-width: 120px; }
-.subtitle-status { margin: 0; color: var(--gold); font-size: 12px; line-height: 1.5; white-space: pre-line; overflow-wrap: anywhere; }
-.subtitle-status[data-state="ready"] { color: #55d69a; }
-.subtitle-status[data-state="failed"], .subtitle-status[data-state="interrupted"] { color: #ffba85; }
-.drawer-head { gap: 8px; }
-.drawer-head button { flex-shrink: 0; }
-@media (max-height: 520px) and (orientation: landscape) {
-  .controls { max-height: 40dvh; padding-top: 6px; }
-  .processing-notice { padding: 4px 10px; }
-  .processing-notice button { margin-top: 3px; }
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
 }
 
-/* Dedicated server subtitle route; controls remain readable on narrow phones. */
-.subtitle-panel {
-  width: min(760px, 100%);
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  margin: 0 auto;
-  padding: 20px;
-  box-sizing: border-box;
-  border: 1px solid #3c3620;
-  border-radius: 16px;
-  background: #131313;
-  line-height: 1.55;
-}
-.subtitle-panel .drawer-head { gap: 12px; flex-wrap: wrap; }
-.subtitle-panel label { display: block; margin: 18px 0 6px; font-weight: 600; }
-.subtitle-panel input, .subtitle-panel select, .processor-option select {
-  box-sizing: border-box;
-  max-width: 100%;
-  padding: 12px;
-  border: 1px solid #514b36;
-  border-radius: 9px;
-  background: #202020;
-  color: #fff;
-  font: inherit;
-}
-.subtitle-panel input, .subtitle-panel select { width: 100%; }
-.processor-option { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
-.subtitle-submit { margin: 12px 0; padding: 14px 20px; font-weight: 700; }
-#subtitleModuleStatus { white-space: pre-line; overflow-wrap: anywhere; }
-@media (max-width: 540px) {
-  .subtitle-panel { margin: 0; border-radius: 0; padding: 16px; }
-  .topbar { flex-wrap: wrap; }
-  .top-meta { min-width: 170px; }
+/* Pe ecrane joase, lasă panoul să deruleze fără să micșoreze excesiv imaginea */
+@media (max-height: 520px) {
+  .controls {
+    max-height: 34dvh;
+    padding-top: 4px;
+  }
+
+  .rec-btn {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+  }
 }
